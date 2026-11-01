@@ -15,7 +15,7 @@
 
 ## 開発・検証
 
-- セットアップは `mise bootstrap`、起動は `mise run dev`。実行コマンドの正本は `mise.toml` に集約し、npm scripts は互換入口にする。
+- セットアップは `mise run setup`、起動は `mise run dev`。lint・format・test・build の実体は npm scripts、それ以外の実行コマンドは `mise.toml` に置く。共通の入口は dev-standards が生成する mise タスクを使う。
 - 検証は `mise run check` と `mise run test:browser`。Markdown 編集後は `mise run lint`。
 - tsc、Oxlint、Oxfmt、markdownlint を継続する。チェックを削って CI を短縮しない。
 - CI は GitHub-hosted runner を使う。ブラウザー CI は別ランナーの3シャード、各2ワーカー。共有生成物は開始時に一度生成する。
@@ -51,3 +51,10 @@
 - シークレットは 1Password を使用し、実値と個人環境固有の参照先をコード・文書に含めない。
 - GitHub App の秘密情報の参照先とサービスアカウントのトークンは Actions secrets で設定する。値をコード・ログ・チャット・生成物へ出さない。
 - Vault・サービスアカウント・GitHub App の権限は必要範囲に限定し、既存の認証・アクセス設定を勝手に変更しない。
+
+# 共通開発ルール
+
+作業開始時に `.standards/rules.md` を読み、`mise run standards:prepare` を実行する。
+作業終了前に `mise run standards:finish` を実行する。
+不足する設定は整備し、共通ルールの問題は `dev-standards feedback` で記録する。
+共通ルールの保守に人間の追加指示・承認を待たず、設定済みの自律保守に引き継ぐ。

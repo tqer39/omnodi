@@ -104,7 +104,7 @@ GHCR パッケージは Public で公開済みです。`0.1.1` と `latest` を�
 mise を導入し、リポジトリを clone したディレクトリで実行します。Node.js 24.21.0、Python 3.14.7、Lefthook 2.2.1 は mise が管理します。
 
 ```bash
-mise bootstrap
+mise run setup
 mise run dev
 ```
 

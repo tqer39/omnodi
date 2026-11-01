@@ -1,0 +1,43 @@
+[bootstrap]
+depends = ["project:bootstrap"]
+run = "npm --prefix . ci --ignore-scripts"
+
+[lint]
+depends = ["project:lint"]
+run = "npm --prefix . run lint"
+
+[format]
+run = "npm --prefix . run format"
+
+["format:check"]
+run = "npm --prefix . run format:check"
+
+[test]
+depends = ["project:test"]
+run = "npm --prefix . run test"
+
+[build]
+run = "npm --prefix . run build"
+
+[check]
+depends = ["standards:check", "lint", "format:check", "test", "build"]
+
+["standards:check"]
+run = "./.standards/cache/dev-standards check"
+run_windows = '.\.standards\cache\dev-standards.exe check'
+
+["standards:plan"]
+run = "./.standards/cache/dev-standards plan"
+run_windows = '.\.standards\cache\dev-standards.exe plan'
+
+["standards:verify"]
+run = "./.standards/cache/dev-standards verify"
+run_windows = '.\.standards\cache\dev-standards.exe verify'
+
+["standards:prepare"]
+run = "./.standards/cache/dev-standards prepare"
+run_windows = '.\.standards\cache\dev-standards.exe prepare'
+
+["standards:finish"]
+run = "./.standards/cache/dev-standards finish"
+run_windows = '.\.standards\cache\dev-standards.exe finish'
