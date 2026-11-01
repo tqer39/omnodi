@@ -1,0 +1,11 @@
+# リポジトリ固有のタスク。共通の予約名は定義しない。
+# 共通の bootstrap・lint・test に、omnodi 固有の準備と検査を追加する。
+
+["project:bootstrap"]
+depends = ["hooks:install", "rules:generate"]
+
+["project:lint"]
+depends = ["rules:check"]
+
+["project:test"]
+depends = ["test:icons"]

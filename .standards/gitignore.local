@@ -1,0 +1,15 @@
+node_modules/
+dist/
+artifacts/
+.env*
+!.env.example
+*.tfstate*
+*.tfplan
+.terraform/
+plan.json
+state.json
+!/.standards/state.json
+*.log
+.DS_Store
+
+__pycache__/

@@ -120,7 +120,7 @@ App が作成したPRでは通常のPR CIも実行されます。
 ```bash
 npm run icons:check  # 取得・検証・差分一覧だけ（書き込まない）
 npm run icons:update
-npm run fmt
+npm run format
 npm run check
 npm run test:browser
 ```

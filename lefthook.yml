@@ -5,5 +5,7 @@ pre-commit:
   commands:
     lint:
       run: mise run lint
+    format:
+      run: mise run format:check
     rules:
       run: mise run rules:check
