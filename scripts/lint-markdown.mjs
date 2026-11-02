@@ -25,7 +25,14 @@ const files = [
     .map((f) => `.rulesync/rules/${f}`),
   ...(await readdir('docs')).filter((f) => f.endsWith('.md')).map((f) => `docs/${f}`),
 ];
-const result = await lint({ files, config: { default: true, MD013: false } });
+// rulesync は複数のルールを AGENTS.md に結合するため、各ルールの見出しを保持する。
+const result = {
+  ...(await lint({
+    files: files.filter((file) => file !== 'AGENTS.md'),
+    config: { default: true, MD013: false },
+  })),
+  ...(await lint({ files: ['AGENTS.md'], config: { default: true, MD013: false, MD025: false } })),
+};
 const errors = Object.entries(result).flatMap(([file, problems]) =>
   problems.map(
     (problem) =>

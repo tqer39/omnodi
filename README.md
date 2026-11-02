@@ -414,3 +414,12 @@ Claude Code の `AGENTS.md` 対応には v2.1.277 以降が必要です。
 実行コマンドは `mise.toml` が正本で、npm scripts は互換入口です。
 ビルド・アイコン収集など、まとまった処理の実装は既存スクリプトを保ち、mise から呼び出します。
 公開用の Bash 処理は GitHub Actions の Linux 専用です。
+
+## 共通開発設定
+
+開発設定は dev-standards で管理します。作業開始時に `mise run standards:prepare`、
+終了前に `mise run standards:verify` と `mise run standards:finish` を実行します。
+適用版は `mise run standards:version` で確認できます。
+ツールと固有タスクの正本は `.standards/mise.project.toml`、追加の検証は
+`.standards/tasks.project.toml` です。正本を変更した後は `mise run standards:plan` で計画を確認し、
+CLI の `apply` で再生成します。

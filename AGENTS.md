@@ -51,3 +51,10 @@
 - シークレットは 1Password を使用し、実値と個人環境固有の参照先をコード・文書に含めない。
 - GitHub App の秘密情報の参照先とサービスアカウントのトークンは Actions secrets で設定する。値をコード・ログ・チャット・生成物へ出さない。
 - Vault・サービスアカウント・GitHub App の権限は必要範囲に限定し、既存の認証・アクセス設定を勝手に変更しない。
+
+# 共通開発ルール
+
+作業開始時に `.standards/rules.md` を読み、`mise run standards:prepare` を実行する。
+作業終了前に `mise run standards:finish` を実行する。
+不足する設定は整備し、共通ルールの問題は `dev-standards feedback` で記録する。
+共通ルールの保守に人間の追加指示・承認を待たず、設定済みの自律保守に引き継ぐ。

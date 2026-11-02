@@ -24,9 +24,9 @@
   "scripts": {
     "dev": "mise run dev",
     "typecheck": "mise run typecheck",
-    "lint": "mise run lint",
-    "test": "mise run test",
-    "build": "mise run build",
+    "lint": "mise run repo:lint",
+    "test": "mise run repo:test",
+    "build": "mise run repo:build",
     "cli": "mise run cli",
     "check:static": "mise run check:static",
     "check": "mise run check",
@@ -35,7 +35,9 @@
     "fmt:check": "mise run fmt:check",
     "icons:update": "mise run icons:update",
     "icons:check": "mise run icons:check",
-    "test:icons": "mise run test:icons"
+    "test:icons": "mise run test:icons",
+    "format": "mise run fmt",
+    "format:check": "mise run fmt:check"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.1152.0",

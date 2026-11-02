@@ -1,0 +1,17 @@
+node_modules/
+dist/
+artifacts/
+.env*
+!.env.example
+*.tfstate*
+*.tfplan
+.terraform/
+plan.json
+state.json
+*.log
+.DS_Store
+
+__pycache__/
+
+# 共通開発設定の管理状態は追跡する
+!/.standards/state.json

@@ -1,0 +1,6 @@
+# 共通タスクに追加する既存の検証とセットアップ。
+["project:bootstrap"]
+run = "mise run repo:bootstrap"
+
+["project:test"]
+run = ["mise run test:icons", "mise run rules:check"]

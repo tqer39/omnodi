@@ -11,6 +11,18 @@
     "src/assets/*.svg",
     "src/assets/manifest.json",
     "docs/screenshots/**",
-    "package-lock.json"
+    "package-lock.json",
+    ".codex/hooks.json",
+    ".github/workflows/dev-standards.yml",
+    ".rulesync/rules/dev-standards.md",
+    ".claude/rules/dev-standards.md",
+    ".devin/rules/dev-standards.md",
+    ".github/instructions/dev-standards.instructions.md",
+    ".standards/state.json",
+    ".standards/lock.json",
+    ".standards/repository.yml",
+    ".standards/exceptions.yml",
+    ".standards/rules.md",
+    "mise.toml"
   ]
 }
