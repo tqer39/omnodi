@@ -1726,3 +1726,15 @@ textarea:focus-visible {
 .react-flow__node.selected .resource-card:is([data-shape='diamond'], [data-shape='ellipse']) {
   box-shadow: none;
 }
+.resource-suggestions p {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 6px 0;
+}
+.resource-suggestion {
+  border-top: 1px solid #dce2e9;
+  padding: 10px 0;
+}
+.resource-suggestion small {
+  overflow-wrap: anywhere;
+}

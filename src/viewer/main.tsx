@@ -71,6 +71,7 @@ import { getRegionCountry, getResourceRegion } from '../assets/regions';
 import { createHistory, historyReducer } from './history';
 import defaultSource from '../../examples/aws.infra?raw';
 import { PropertyEditor } from './property-editor';
+import { addSuggestedResource, suggestResources } from '../core/suggestions';
 import { edgeKindLabels as kindLabels, type Attributes, type Connection } from '../core/model';
 import { connectionStyles, connectionDescriptions } from './connection-style';
 
@@ -1233,6 +1234,60 @@ function App() {
     ],
   );
   const selectedResource = diagram?.resources.find((resource) => resource.id === selected);
+  const resourceSuggestions = useMemo(
+    () => (diagram && selected ? suggestResources(diagram, selected) : []),
+    [diagram, selected],
+  );
+  const suggestionBlocked = useMemo(
+    () => Boolean(diagram && source !== serializeDSL(diagram)),
+    [diagram, source],
+  );
+  const addSuggestion = (type: string) => {
+    if (!diagram || !selected || suggestionBlocked) return;
+    try {
+      const next = addSuggestedResource(diagram, selected, type);
+      const nextSource = serializeDSL(next);
+      const parsed = parseDSL(nextSource);
+      if (!parsed.diagram)
+        throw new Error(parsed.diagnostics.map((item) => item.message).join('\n'));
+      next.resources = next.resources.map((item) => ({
+        ...item,
+        location: parsed.diagram!.resources.find((resource) => resource.id === item.id)?.location,
+      }));
+      next.connections = next.connections.map((item) => ({
+        ...item,
+        location: parsed.diagram!.connections.find((edge) => edge.id === item.id)?.location,
+      }));
+      const added = next.resources.at(-1)!;
+      const ancestors = new Set<string>();
+      let parentId = added.parentId;
+      while (parentId && !ancestors.has(parentId)) {
+        ancestors.add(parentId);
+        parentId = next.resources.find((item) => item.id === parentId)?.parentId;
+      }
+      const nextScope = scope && ancestors.has(scope) ? scope : undefined;
+      autoFitContext.current = { diagram: next, view, scope: nextScope };
+      dispatchHistory({
+        type: 'commit',
+        update: (current) => ({
+          ...current,
+          diagram: next,
+          source: nextSource,
+          scope: nextScope,
+          collapsed: current.collapsed.filter((id) => !ancestors.has(id)),
+          expanded: [...new Set([...current.expanded, ...ancestors])],
+          ...(type === 'sg' ? { showSG: true } : {}),
+        }),
+      });
+      setSource(nextSource);
+      setDiagnostics([]);
+      setSelected(added.id);
+      setSelectedEdge(undefined);
+      setHovered(undefined);
+    } catch (error) {
+      setDiagnostics([error instanceof Error ? error.message : String(error)]);
+    }
+  };
   const selectedRelations = [
     ...(diagram?.connections ?? []),
     ...(graph?.connections.filter(
@@ -2475,6 +2530,52 @@ function App() {
                 </span>
               </h2>
               <code className="resource-id">{selectedResource.id}</code>
+              <section aria-label="次に追加するリソース" className="resource-suggestions">
+                <h3>次に追加するリソース</h3>
+                {resourceSuggestions.length ? (
+                  <>
+                    <p>
+                      候補を追加すると、そのリソースの次の候補へ進みます。接続は設計上の意図であり、通信・権限の成立は未確認です。
+                    </p>
+                    {suggestionBlocked && (
+                      <p role="status">
+                        DSL に未反映の変更があります。先に解析して反映してください。
+                      </p>
+                    )}
+                    {resourceSuggestions.map((suggestion) => (
+                      <div className="resource-suggestion" key={suggestion.type}>
+                        <button
+                          className="toolbar-button"
+                          disabled={suggestionBlocked}
+                          onClick={() => addSuggestion(suggestion.type)}
+                        >
+                          {suggestion.label} を追加
+                        </button>
+                        <p>{suggestion.reason}</p>
+                        <small>
+                          配置先:{' '}
+                          {diagram?.resources.find((item) => item.id === suggestion.parentId)
+                            ?.label ?? '図の最上位'}
+                        </small>
+                        {suggestion.connection && (
+                          <p>
+                            追加する{kindLabels[suggestion.connection.kind]}:{' '}
+                            {suggestion.connection.reverse
+                              ? `${suggestion.label} → ${selectedResource.label}`
+                              : `${selectedResource.label} → ${suggestion.label}`}
+                            （{suggestion.connection.label}）
+                          </p>
+                        )}
+                        {suggestion.note && <p>{suggestion.note}</p>}
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <p>
+                    この種別の候補はまだありません。別の AWS リソースを選択して追加を続けられます。
+                  </p>
+                )}
+              </section>
               {(diagram?.resources ?? []).filter(
                 (resource) =>
                   resource.type === 'sg' &&
