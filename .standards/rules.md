@@ -9,7 +9,7 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-BOOTSTRAP
 
-# 繰り返し実行できるセットアップ
+### 繰り返し実行できるセットアップ
 
 共通の開発手順を成果物と検査で再現する。
 
@@ -17,7 +17,7 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-EDITORCONFIG
 
-# EditorConfig の導入
+### EditorConfig の導入
 
 共通の開発手順を成果物と検査で再現する。
 
@@ -25,7 +25,7 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-FORMAT
 
-# 整形を検証する
+### 整形を検証する
 
 共通の開発手順を成果物と検査で再現する。
 
@@ -33,7 +33,7 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-GITIGNORE
 
-# gitignore.io の入力を保存する
+### gitignore.io の入力を保存する
 
 共通の開発手順を成果物と検査で再現する。
 
@@ -41,7 +41,7 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-LINT
 
-# 静的解析を実行する
+### 静的解析を実行する
 
 共通の開発手順を成果物と検査で再現する。
 
@@ -49,11 +49,15 @@ EditorConfig、gitignore.io の採用入力、mise の作業入口を維持す�
 
 ## CORE-MISE
 
-# タスクの入口を mise に集約する
+### タスクの入口を mise に集約する
 
 共通の開発手順を成果物と検査で再現する。
 
 計画を確認して適用し、check と verify で確認する。
+
+利用先に適用した版は `mise run standards:version` で、ロックの記録から確認する。
+`dev-standards version` は起動した CLI 自身の版であり、適用版と一致するとは限らない。
+適用版の表示だけで検証済みとは判断せず、設定検査と `verify` の結果を確認する。
 
 mise に固定した実行系を検査の基準とする。ネイティブ拡張など実行系の ABI に依存する
 補助キャッシュは、作成時と実行時の ABI が一致しなければ再利用できない。キャッシュの
@@ -66,7 +70,7 @@ mise に固定した実行系を検査の基準とする。ネイティブ拡張
 
 ## PROCESS-LANGUAGE
 
-# 要件から開発言語を選定する
+### 要件から開発言語を選定する
 
 言語選定記録には、解決する要件、比較した候補、採用理由を具体的に記載する。
 配布先、実行環境、保守性、既存構成など、そのリポジトリで選定を左右する制約を候補間で比較する。
