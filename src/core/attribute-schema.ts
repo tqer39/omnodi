@@ -1,5 +1,7 @@
 export const textAttributes = new Set([
   'icon',
+  'shape',
+  'stereotype',
   'config',
   'configFormat',
   'cpuRequest',
@@ -60,6 +62,8 @@ export const arrayAttributes = new Set([
   'columns',
   'rows',
   'items',
+  'fields',
+  'operations',
   'subnets',
   'members',
   'tags',

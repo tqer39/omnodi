@@ -1,3 +1,4 @@
+import { nodeShape, connectionMarker, markerPath } from '../core/notation';
 import { sampleGroups } from './samples';
 import { resourceTypeLabel, resourceAppearance } from '../core/presentation';
 import { renderSVG, printDocument, type PrintOptions } from '../core/static-svg';
@@ -18,6 +19,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useId,
   useState,
   useReducer,
   type CSSProperties,
@@ -32,7 +34,6 @@ import {
   Handle,
   ViewportPortal,
   Position,
-  MarkerType,
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
@@ -105,6 +106,8 @@ const viewLabels: Record<string, string> = {
 };
 
 function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
+  const marker = connectionMarker({ kind });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
   return (
     <svg
       width="42"
@@ -120,7 +123,12 @@ function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
         strokeDasharray={connectionStyles[kind].dash}
         fill="none"
       />
-      <path d="M 36 3 L 41 6 L 36 9 Z" fill="currentColor" />
+      <path
+        d={markerPath(marker)}
+        transform={atStart ? 'translate(11 0) rotate(180 6 6)' : 'translate(30 0)'}
+        fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : 'currentColor'}
+        stroke="currentColor"
+      />
     </svg>
   );
 }
@@ -283,9 +291,21 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
   const homepage = getIconHomepage(resource.type);
   const content = resourceContent(resource);
   const metadata = resourceMetadata(resource);
+  const appearance = resourceAppearance(resource);
+  const shaped = !boundary && ['diamond', 'ellipse'].includes(nodeShape(resource));
+  const cardStyle: CSSProperties = shaped
+    ? ({
+        ...appearance,
+        background: 'transparent',
+        '--notation-fill': appearance.background ?? '#fff',
+        '--notation-stroke': appearance.borderColor ?? '#afc6d2',
+        '--notation-dash': appearance.borderStyle === 'dashed' ? '6 4' : 'none',
+      } as CSSProperties)
+    : appearance;
   return (
     <div
-      style={resourceAppearance(resource)}
+      style={cardStyle}
+      data-shape={boundary ? 'rectangle' : nodeShape(resource)}
       data-evidence={String(resource.attributes.evidence ?? '')}
       data-change={String(resource.attributes.change ?? '')}
       data-exposure={String(
@@ -297,6 +317,22 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
       data-appearance={String(resource.attributes.appearance ?? 'default')}
       className={`resource-card ${data.compact ? 'compact-card' : ''} ${boundary && !collapsed ? 'boundary-card' : ''} ${boundary && resource.type.startsWith('aws.') ? 'detail-boundary-card' : ''} ${collapsed ? 'collapsed-card' : ''} ${related ? 'related' : ''} ${muted ? 'muted' : ''}`}
     >
+      {shaped && (
+        <svg
+          className="notation-outline"
+          width="100%"
+          height="100%"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {nodeShape(resource) === 'diamond' ? (
+            <polygon points="0,50 50,0 100,50 50,100" />
+          ) : (
+            <ellipse cx="50" cy="50" rx="49.5" ry="49.5" />
+          )}
+        </svg>
+      )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       {Array.isArray(resource.attributes.ports) &&
@@ -342,7 +378,11 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
           </span>
         )}
         <div className="resource-text">
-          <span className="resource-type">{resourceTypeLabel(resource)}</span>
+          <span className="resource-type">
+            {resource.attributes.stereotype
+              ? `«${resource.attributes.stereotype}»`
+              : resourceTypeLabel(resource)}
+          </span>
           <span className="resource-label">
             <RegionFlag resource={resource} />
             {homepage ? (
@@ -460,14 +500,34 @@ function RoutedConnection(props: EdgeProps) {
       ? curveAnchor
       : undefined
     : route?.labelAnchor;
+  const markerId = `notation-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const marker = connectionMarker({ kind: props.data?.kind as Connection['kind'] });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
+  const color = String(props.style?.stroke ?? '#596579');
   const select = props.data?.onSelect as ((id: string) => void) | undefined;
   return (
     <>
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="12"
+          markerHeight="12"
+          refX="11"
+          refY="6"
+          orient="auto-start-reverse"
+        >
+          <path
+            d={markerPath(marker)}
+            fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : color}
+            stroke={color}
+          />
+        </marker>
+      </defs>
       <BaseEdge
         id={props.id}
         path={path}
-        markerEnd={props.markerEnd}
-        markerStart={props.markerStart}
+        markerEnd={atStart ? undefined : `url(#${markerId})`}
+        markerStart={atStart ? `url(#${markerId})` : undefined}
         style={props.style}
       />
       {labelAnchor && (
@@ -960,17 +1020,6 @@ function App() {
               ? `target:${edge.attributes.targetPort}`
               : undefined,
             label: connectionLabel(edge),
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color:
-                edge.attributes.change === 'add'
-                  ? '#258454'
-                  : edge.attributes.change === 'remove'
-                    ? '#ad4848'
-                    : edge.attributes.change === 'modify'
-                      ? '#b27616'
-                      : connectionStyles[edge.kind].color,
-            },
             style: {
               stroke:
                 edge.attributes.change === 'add'
