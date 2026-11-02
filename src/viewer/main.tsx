@@ -1,3 +1,5 @@
+import { nodeShape, connectionMarker, markerPath } from '../core/notation';
+import { ActionLabel } from './ActionLabel';
 import { sampleGroups } from './samples';
 import { resourceTypeLabel, resourceAppearance } from '../core/presentation';
 import { renderSVG, printDocument, type PrintOptions } from '../core/static-svg';
@@ -18,6 +20,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useId,
   useState,
   useReducer,
   type CSSProperties,
@@ -32,7 +35,6 @@ import {
   Handle,
   ViewportPortal,
   Position,
-  MarkerType,
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
@@ -105,6 +107,8 @@ const viewLabels: Record<string, string> = {
 };
 
 function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
+  const marker = connectionMarker({ kind });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
   return (
     <svg
       width="42"
@@ -120,7 +124,12 @@ function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
         strokeDasharray={connectionStyles[kind].dash}
         fill="none"
       />
-      <path d="M 36 3 L 41 6 L 36 9 Z" fill="currentColor" />
+      <path
+        d={markerPath(marker)}
+        transform={atStart ? 'translate(11 0) rotate(180 6 6)' : 'translate(30 0)'}
+        fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : 'currentColor'}
+        stroke="currentColor"
+      />
     </svg>
   );
 }
@@ -283,9 +292,21 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
   const homepage = getIconHomepage(resource.type);
   const content = resourceContent(resource);
   const metadata = resourceMetadata(resource);
+  const appearance = resourceAppearance(resource);
+  const shaped = !boundary && ['diamond', 'ellipse'].includes(nodeShape(resource));
+  const cardStyle: CSSProperties = shaped
+    ? ({
+        ...appearance,
+        background: 'transparent',
+        '--notation-fill': appearance.background ?? '#fff',
+        '--notation-stroke': appearance.borderColor ?? '#afc6d2',
+        '--notation-dash': appearance.borderStyle === 'dashed' ? '6 4' : 'none',
+      } as CSSProperties)
+    : appearance;
   return (
     <div
-      style={resourceAppearance(resource)}
+      style={cardStyle}
+      data-shape={boundary ? 'rectangle' : nodeShape(resource)}
       data-evidence={String(resource.attributes.evidence ?? '')}
       data-change={String(resource.attributes.change ?? '')}
       data-exposure={String(
@@ -297,6 +318,22 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
       data-appearance={String(resource.attributes.appearance ?? 'default')}
       className={`resource-card ${data.compact ? 'compact-card' : ''} ${boundary && !collapsed ? 'boundary-card' : ''} ${boundary && resource.type.startsWith('aws.') ? 'detail-boundary-card' : ''} ${collapsed ? 'collapsed-card' : ''} ${related ? 'related' : ''} ${muted ? 'muted' : ''}`}
     >
+      {shaped && (
+        <svg
+          className="notation-outline"
+          width="100%"
+          height="100%"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {nodeShape(resource) === 'diamond' ? (
+            <polygon points="0,50 50,0 100,50 50,100" />
+          ) : (
+            <ellipse cx="50" cy="50" rx="49.5" ry="49.5" />
+          )}
+        </svg>
+      )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       {Array.isArray(resource.attributes.ports) &&
@@ -342,7 +379,11 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
           </span>
         )}
         <div className="resource-text">
-          <span className="resource-type">{resourceTypeLabel(resource)}</span>
+          <span className="resource-type">
+            {resource.attributes.stereotype
+              ? `«${resource.attributes.stereotype}»`
+              : resourceTypeLabel(resource)}
+          </span>
           <span className="resource-label">
             <RegionFlag resource={resource} />
             {homepage ? (
@@ -460,14 +501,34 @@ function RoutedConnection(props: EdgeProps) {
       ? curveAnchor
       : undefined
     : route?.labelAnchor;
+  const markerId = `notation-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const marker = connectionMarker({ kind: props.data?.kind as Connection['kind'] });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
+  const color = String(props.style?.stroke ?? '#596579');
   const select = props.data?.onSelect as ((id: string) => void) | undefined;
   return (
     <>
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="12"
+          markerHeight="12"
+          refX="11"
+          refY="6"
+          orient="auto-start-reverse"
+        >
+          <path
+            d={markerPath(marker)}
+            fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : color}
+            stroke={color}
+          />
+        </marker>
+      </defs>
       <BaseEdge
         id={props.id}
         path={path}
-        markerEnd={props.markerEnd}
-        markerStart={props.markerStart}
+        markerEnd={atStart ? undefined : `url(#${markerId})`}
+        markerStart={atStart ? `url(#${markerId})` : undefined}
         style={props.style}
       />
       {labelAnchor && (
@@ -508,6 +569,21 @@ function RoutedConnection(props: EdgeProps) {
 const edgeTypes = { routed: RoutedConnection };
 
 function App() {
+  const [showActionLabels, setShowActionLabels] = useState(() => {
+    try {
+      return localStorage.getItem('omnodi.showActionLabels') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const changeActionLabels = (show: boolean) => {
+    setShowActionLabels(show);
+    try {
+      localStorage.setItem('omnodi.showActionLabels', String(show));
+    } catch {
+      /* 保存できない環境でも現在の画面には反映する。 */
+    }
+  };
   const initial = useMemo(
     () => window.__OMNODI__ ?? window.__INFRA_CANVAS__ ?? parseDSL(defaultSource).diagram,
     [],
@@ -960,17 +1036,6 @@ function App() {
               ? `target:${edge.attributes.targetPort}`
               : undefined,
             label: connectionLabel(edge),
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color:
-                edge.attributes.change === 'add'
-                  ? '#258454'
-                  : edge.attributes.change === 'remove'
-                    ? '#ad4848'
-                    : edge.attributes.change === 'modify'
-                      ? '#b27616'
-                      : connectionStyles[edge.kind].color,
-            },
             style: {
               stroke:
                 edge.attributes.change === 'add'
@@ -1513,7 +1578,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [restoreHistory]);
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-action-labels={showActionLabels}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true">
           ▧
@@ -1530,7 +1595,7 @@ function App() {
             onClick={() => restoreHistory('undo')}
             title="元に戻す（Ctrl / ⌘ + Z）"
           >
-            元に戻す
+            <ActionLabel icon="undo">元に戻す</ActionLabel>
           </button>
           <button
             className="toolbar-button"
@@ -1538,12 +1603,16 @@ function App() {
             onClick={() => restoreHistory('redo')}
             title="やり直す（Ctrl / ⌘ + Shift + Z、Ctrl + Y）"
           >
-            やり直す
+            <ActionLabel icon="redo">やり直す</ActionLabel>
           </button>
         </div>
         <div className="header-actions" role="group" aria-label="ファイル">
-          <button className="toolbar-button" onClick={() => upload.current?.click()}>
-            ファイルを開く
+          <button
+            title="ファイルを開く"
+            className="toolbar-button"
+            onClick={() => upload.current?.click()}
+          >
+            <ActionLabel icon="open">ファイルを開く</ActionLabel>
           </button>
           <select
             className="sample-picker"
@@ -1570,13 +1639,15 @@ function App() {
             ))}
           </select>
           <button
+            title="ダウンロード・印刷"
             className="toolbar-button"
             aria-expanded={exportOpen}
             onClick={() => setExportOpen(!exportOpen)}
           >
-            ダウンロード・印刷
+            <ActionLabel icon="download">ダウンロード・印刷</ActionLabel>
           </button>
           <button
+            title="DSL を保存"
             className="toolbar-button"
             onClick={() => {
               if (!diagram) return;
@@ -1591,29 +1662,32 @@ function App() {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}
           >
-            DSL を保存
+            <ActionLabel icon="save">DSL を保存</ActionLabel>
           </button>
         </div>
         <div className="header-actions" role="group" aria-label="編集・相談">
           <button
+            title="脆弱性情報"
             className={`toolbar-button ${cveOpen ? 'active' : ''}`}
             aria-expanded={cveOpen}
             onClick={() => setCveOpen(!cveOpen)}
           >
-            脆弱性情報
+            <ActionLabel icon="shield">脆弱性情報</ActionLabel>
           </button>
           <button
+            title="DSL を編集"
             className={`toolbar-button ${editorOpen ? 'active' : ''}`}
             onClick={() => setEditorOpen(!editorOpen)}
           >
-            DSL を編集
+            <ActionLabel icon="code">DSL を編集</ActionLabel>
           </button>
           <button
+            title="チャット"
             className={`toolbar-button ${chatOpen ? 'active' : ''}`}
             aria-expanded={chatOpen}
             onClick={() => setChatOpen(!chatOpen)}
           >
-            チャット
+            <ActionLabel icon="chat">チャット</ActionLabel>
           </button>
         </div>
         <input
@@ -1749,7 +1823,7 @@ function App() {
                   }
                 }}
               >
-                ルーペ {magnifierActive ? 'ON' : 'OFF'}
+                <ActionLabel icon="magnify">ルーペ {magnifierActive ? 'ON' : 'OFF'}</ActionLabel>
               </button>
               <label className="detail-picker">
                 構成の詳しさ
@@ -1772,14 +1846,28 @@ function App() {
                   ))}
                 </select>
               </label>
+              <label className="detail-picker arrow-shape-picker">
+                <ActionLabel icon="shape">矢印の形</ActionLabel>
+                <select
+                  title="矢印の形"
+                  aria-label="矢印の形"
+                  value={edgeShape}
+                  onChange={(event) => setEdgeShape(event.target.value as 'orthogonal' | 'bezier')}
+                >
+                  <option value="orthogonal">直角</option>
+                  <option value="bezier">曲線</option>
+                </select>
+              </label>
               <div className="display-options-anchor" ref={displayOptionsAnchor}>
                 <button
                   className="toolbar-button"
                   aria-expanded={filtersOpen}
+                  title="表示オプション"
                   aria-controls="display-options"
                   onClick={() => setFiltersOpen(!filtersOpen)}
                 >
-                  表示オプション <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
+                  <ActionLabel icon="settings">表示オプション</ActionLabel>
+                  <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
                 </button>
                 <section
                   hidden={!filtersOpen}
@@ -1826,17 +1914,12 @@ function App() {
                     <p className="display-hint">SGの所属は、通信の成立を示しません。</p>
                   </fieldset>
                   <label className="display-setting-row">
-                    矢印の形
-                    <select
-                      aria-label="矢印の形"
-                      value={edgeShape}
-                      onChange={(event) =>
-                        setEdgeShape(event.target.value as 'orthogonal' | 'bezier')
-                      }
-                    >
-                      <option value="orthogonal">直角</option>
-                      <option value="bezier">曲線</option>
-                    </select>
+                    <input
+                      type="checkbox"
+                      checked={showActionLabels}
+                      onChange={(event) => changeActionLabels(event.target.checked)}
+                    />
+                    機能名を表示
                   </label>
 
                   <fieldset>
@@ -2053,7 +2136,7 @@ function App() {
                 onClick={clearSelection}
                 title="全体をカラー表示に戻す（パン・ズームは維持）"
               >
-                選択を解除
+                <ActionLabel icon="clear">選択を解除</ActionLabel>
               </button>
               <div className="search-box">
                 <span aria-hidden="true">⌕</span>
@@ -2097,7 +2180,7 @@ function App() {
                 onClick={() => setAllBoundaries(true)}
                 title="現在の表示範囲の境界をすべて折りたたむ"
               >
-                すべて折りたたむ
+                <ActionLabel icon="collapse">すべて折りたたむ</ActionLabel>
               </button>
               <button
                 className="toolbar-button"
@@ -2109,7 +2192,7 @@ function App() {
                 onClick={() => setAllBoundaries(false)}
                 title="現在の表示範囲の境界をすべて展開する"
               >
-                すべて展開する
+                <ActionLabel icon="expand">すべて展開する</ActionLabel>
               </button>
             </div>
             <div className="toolbar-group" role="group" aria-label="配置">
@@ -2119,13 +2202,18 @@ function App() {
                 aria-pressed={editLayout}
                 disabled={Boolean(scope)}
                 title={
-                  scope ? '配置は全体表示で編集できます' : 'ノードを移動し、DSLへ位置を保存します'
+                  scope
+                    ? '配置は全体表示で編集できます'
+                    : editLayout
+                      ? '移動を完了してレイアウト編集を終了します'
+                      : 'ノードを移動し、DSLへ位置を保存します'
                 }
                 onClick={() => setEditLayout(!editLayout)}
               >
-                {editLayout ? '移動を完了' : '配置を移動'}
+                <ActionLabel icon="move">{editLayout ? '移動を完了' : '配置を移動'}</ActionLabel>
               </button>
               <button
+                title="固定を解除"
                 className="toolbar-button"
                 disabled={!diagram?.resources.some((resource) => resource.attributes.fixed)}
                 onClick={() => {
@@ -2145,7 +2233,7 @@ function App() {
                   setDiagram(next);
                 }}
               >
-                固定を解除
+                <ActionLabel icon="unlock">固定を解除</ActionLabel>
               </button>
             </div>
             <div className="canvas-footer" role="group" aria-label="構成情報">

@@ -1916,7 +1916,8 @@ for (const offline of [false, true]) {
       const markerColor = await path.evaluate((el) => {
         const ref = el.getAttribute('marker-end')!;
         const id = ref.slice(ref.indexOf('#') + 1).replace(/["')]/g, '');
-        return getComputedStyle(document.getElementById(id)!.querySelector('polyline')!).stroke;
+        return getComputedStyle(document.getElementById(id)!.querySelector('path, polyline')!)
+          .stroke;
       });
       expect(markerColor).toBe(color);
       await label.click();
@@ -1968,8 +1969,36 @@ for (const offline of [false, true]) {
     await summary.focus();
     await page.keyboard.press('Enter');
     await expect(panel).toBeVisible();
-    const labels = ['通信', '依存', '認証', 'デプロイ', '関連', '複製', '切替'];
-    const patterns = ['実線', '破線', '一点鎖線', '長い破線', '点線', '二点鎖線', '短い破線'];
+    const labels = [
+      '通信',
+      '依存',
+      '認証',
+      'デプロイ',
+      '関連',
+      '複製',
+      '切替',
+      '業務フロー',
+      '因果関係',
+      '継承',
+      '実現',
+      '集約',
+      '合成',
+    ];
+    const patterns = [
+      '実線',
+      '破線',
+      '一点鎖線',
+      '長い破線',
+      '点線',
+      '二点鎖線',
+      '短い破線',
+      '実線',
+      '実線',
+      '実線',
+      '破線',
+      '実線',
+      '実線',
+    ];
     for (const [index, row] of (await panel.locator('dl > div').all()).entries()) {
       await expect(row.locator('dt')).toContainText(labels[index]!);
       await expect(row.locator('dt')).toContainText(patterns[index]!);
@@ -1980,7 +2009,7 @@ for (const offline of [false, true]) {
         await legend.locator('svg path').first().getAttribute('stroke-dasharray'),
       );
     }
-    await expect(panel.locator('dl > div')).toHaveCount(7);
+    await expect(panel.locator('dl > div')).toHaveCount(13);
     await expect(panel).toContainText('通信の成立は示しません');
     await expect(panel).toContainText('実効権限は示しません');
     await expect(viewport).toHaveAttribute('style', before!);

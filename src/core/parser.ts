@@ -235,9 +235,13 @@ export function parseDSL(source: string): ParseResult {
           'routeDirection',
           'sourcePort',
           'targetPort',
+          'polarity',
+          'delay',
+          'sourceMultiplicity',
+          'targetMultiplicity',
         ].includes(key);
         valid =
-          key === 'encrypted'
+          key === 'encrypted' || key === 'delay'
             ? typeof val === 'boolean'
             : key === 'step'
               ? typeof val === 'number' && Number.isSafeInteger(val) && val > 0

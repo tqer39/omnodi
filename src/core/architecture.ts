@@ -1,3 +1,4 @@
+import { validateNotationResource, validateNotationConnection } from './notation.js';
 import { validateSecurity } from './security.js';
 import { validatePresentation, evidenceLabels, changeLabels } from './presentation.js';
 import { edgeKinds, type Diagram, type Resource } from './model.js';
@@ -61,6 +62,7 @@ export function validateArchitecture(diagram: Diagram): void {
       resources.get(edge.target)?.type === 'overlay'
     )
       throw new Error('overlay は接続端点にできません。');
+    validateNotationConnection(edge);
     const attrs = edge.attributes;
     for (const [key, values] of [
       ['evidence', Object.keys(evidenceLabels)],
@@ -153,6 +155,7 @@ export function validateArchitecture(diagram: Diagram): void {
 /** 配置APIにも適用し、不正な固定座標・接続口から計算を始めない。 */
 export function validateResourceExpressions(resource: Resource): void {
   validatePresentation(resource);
+  validateNotationResource(resource);
   const attrs = resource.attributes;
   if (
     attrs.ports !== undefined &&
