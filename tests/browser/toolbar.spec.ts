@@ -64,3 +64,60 @@ for (const offline of [false, true]) {
     await page.screenshot({ path: `artifacts/toolbar-${offline ? 'offline' : 'dev'}.png` });
   });
 }
+
+for (const offline of [false, true]) {
+  test(`矢印を直接切り替え、機能名の表示設定を保持する (${offline ? 'HTML' : '開発画面'})`, async ({
+    page,
+    context,
+  }) => {
+    if (offline) await context.setOffline(true);
+    await page.goto(
+      offline
+        ? 'file://' + resolve('artifacts/aws.html')
+        : `http://127.0.0.1:${process.env.INFRA_TEST_PORT ?? '5188'}`,
+    );
+    await expect(page.locator('.layout-status')).toHaveCount(0);
+    const shape = page.getByRole('combobox', { name: '矢印の形', exact: true });
+    const options = page.getByRole('region', { name: '表示オプション', exact: true });
+    await expect(options).toBeHidden();
+    await expect(shape).toBeVisible();
+    const viewport = page.locator('.react-flow__viewport');
+    await viewport.evaluate(async () => {
+      for (let i = 0; i < 35; i++) await new Promise(requestAnimationFrame);
+    });
+    const position = await viewport.getAttribute('style');
+    const edge = page.locator('.react-flow__edge-path').first();
+    const straight = await edge.getAttribute('d');
+    await shape.selectOption('bezier');
+    await expect(edge).not.toHaveAttribute('d', straight!);
+    expect(await viewport.getAttribute('style')).toBe(position);
+    await page.getByRole('button', { name: '元に戻す', exact: true }).click();
+    await expect(shape).toHaveValue('orthogonal');
+    await page.getByRole('button', { name: 'やり直す', exact: true }).click();
+    await expect(shape).toHaveValue('bezier');
+    const settings = page.getByRole('button', { name: '表示オプション', exact: true });
+    await settings.click();
+    await options.getByRole('checkbox', { name: '機能名を表示', exact: true }).uncheck();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-action-labels', 'false');
+    await settings.click();
+    const move = page.getByRole('button', { name: '配置を移動', exact: true });
+    await expect(move).toHaveAttribute('title', 'ノードを移動し、DSLへ位置を保存します');
+    await move.click();
+    const finish = page.getByRole('button', { name: '移動を完了', exact: true });
+    await expect(finish).toHaveAttribute('title', '移動を完了してレイアウト編集を終了します');
+    await expect(finish).toHaveAttribute('aria-pressed', 'true');
+    await finish.click();
+    await expect(move).toHaveAttribute('aria-pressed', 'false');
+    const edit = page.getByRole('button', { name: 'DSL を編集', exact: true });
+    await expect(edit.locator('svg')).toBeVisible();
+    await expect(edit).toHaveAttribute('title', 'DSL を編集');
+    await edit.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'DSL 入力', exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-action-labels', 'false');
+    await settings.click();
+    await options.getByRole('checkbox', { name: '機能名を表示', exact: true }).check();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-action-labels', 'true');
+  });
+}

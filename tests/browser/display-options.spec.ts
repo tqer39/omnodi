@@ -22,7 +22,7 @@ for (const offline of [false, true]) {
     });
     const position = await viewport.getAttribute('style');
     await button.click();
-    await panel.getByRole('combobox', { name: '矢印の形', exact: true }).selectOption('bezier');
+    await panel.getByRole('checkbox', { name: '機能名を表示', exact: true }).uncheck();
     await expect(panel).toBeVisible();
     await expandDisplaySection(page, '保存した表示');
     await panel
@@ -86,15 +86,8 @@ for (const offline of [false, true]) {
       additions.getByRole('checkbox', { name: '追加の囲み', exact: true }),
     ).toBeVisible();
     await expect(additions.getByRole('combobox', { name: '矢印の形', exact: true })).toHaveCount(0);
-    const additionsBounds = (await additions.boundingBox())!;
-    const shapeBounds = (await options
-      .getByRole('combobox', { name: '矢印の形', exact: true })
-      .boundingBox())!;
-    expect(shapeBounds.y).toBeGreaterThanOrEqual(additionsBounds.y + additionsBounds.height);
-    await expect(options.getByRole('combobox', { name: '矢印の形', exact: true })).toBeVisible();
-    await expect(options.getByRole('combobox', { name: '矢印の形', exact: true })).toHaveValue(
-      'orthogonal',
-    );
+    await expect(options.getByRole('combobox', { name: '矢印の形', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('combobox', { name: '矢印の形', exact: true })).toBeVisible();
     await expect(
       options.getByRole('checkbox', { name: '追加の囲み', exact: true }),
     ).not.toBeChecked();
@@ -133,7 +126,7 @@ for (const offline of [false, true]) {
     await expect(
       options.getByRole('checkbox', { name: 'セキュリティグループと所属', exact: true }),
     ).toBeChecked();
-    await options.getByRole('combobox', { name: '矢印の形', exact: true }).focus();
+    await options.getByRole('checkbox', { name: '機能名を表示', exact: true }).focus();
     await page.keyboard.press('Escape');
     await expect(options).toBeHidden();
     await expect(button).toBeFocused();
