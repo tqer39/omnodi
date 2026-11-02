@@ -100,6 +100,14 @@ for (const offline of [false, true]) {
     await options.getByRole('checkbox', { name: '機能名を表示', exact: true }).uncheck();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-action-labels', 'false');
     await settings.click();
+    const move = page.getByRole('button', { name: '配置を移動', exact: true });
+    await expect(move).toHaveAttribute('title', 'ノードを移動し、DSLへ位置を保存します');
+    await move.click();
+    const finish = page.getByRole('button', { name: '移動を完了', exact: true });
+    await expect(finish).toHaveAttribute('title', '移動を完了してレイアウト編集を終了します');
+    await expect(finish).toHaveAttribute('aria-pressed', 'true');
+    await finish.click();
+    await expect(move).toHaveAttribute('aria-pressed', 'false');
     const edit = page.getByRole('button', { name: 'DSL を編集', exact: true });
     await expect(edit.locator('svg')).toBeVisible();
     await expect(edit).toHaveAttribute('title', 'DSL を編集');

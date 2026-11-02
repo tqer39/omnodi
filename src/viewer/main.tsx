@@ -2202,7 +2202,11 @@ function App() {
                 aria-pressed={editLayout}
                 disabled={Boolean(scope)}
                 title={
-                  scope ? '配置は全体表示で編集できます' : 'ノードを移動し、DSLへ位置を保存します'
+                  scope
+                    ? '配置は全体表示で編集できます'
+                    : editLayout
+                      ? '移動を完了してレイアウト編集を終了します'
+                      : 'ノードを移動し、DSLへ位置を保存します'
                 }
                 onClick={() => setEditLayout(!editLayout)}
               >
