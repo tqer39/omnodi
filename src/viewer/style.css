@@ -1722,3 +1722,7 @@ textarea:focus-visible {
   overflow: visible;
   overflow-wrap: anywhere;
 }
+
+.react-flow__node.selected .resource-card:is([data-shape='diamond'], [data-shape='ellipse']) {
+  box-shadow: none;
+}

@@ -35,10 +35,18 @@ for (const offline of [false, true]) {
     await expect(decision.locator('[data-shape="diamond"] polygon')).toBeVisible();
     await expect(decision).toContainText('予算内か？');
     // 菱形の本文が中央半分の領域に収まり、接続口が残る。
-    const bounds = await decision.boundingBox();
-    const text = await decision.locator('.resource-heading').boundingBox();
-    expect(text!.x).toBeGreaterThan(bounds!.x + bounds!.width * 0.2);
-    expect(text!.x + text!.width).toBeLessThan(bounds!.x + bounds!.width * 0.8);
+    // ズーム中も、外形と本文を同じ描画フレームの座標で比較する。
+    await expect
+      .poll(() =>
+        decision.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          const text = element.querySelector('.resource-heading')!.getBoundingClientRect();
+          return (
+            text.x > bounds.x + bounds.width * 0.2 && text.right < bounds.x + bounds.width * 0.8
+          );
+        }),
+      )
+      .toBe(true);
     await picker.selectOption('causal-loop');
     await expect(page.locator('.layout-status')).toHaveCount(0);
     await page.getByRole('button', { name: 'Fit View' }).click();
@@ -108,6 +116,7 @@ for (const offline of [false, true]) {
       expect(geometry.offsets.every((offset) => offset < 4)).toBe(true);
       await node.locator('.resource-label').click();
       await expect(outline).toHaveCSS('stroke', 'rgb(25, 135, 121)');
+      await expect(node.locator('.resource-card')).toHaveCSS('box-shadow', 'none');
       await page.getByRole('button', { name: '選択を解除', exact: true }).click();
       await expect(outline).toHaveCSS('stroke', 'rgb(37, 132, 84)');
     }
