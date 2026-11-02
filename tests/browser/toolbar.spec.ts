@@ -25,7 +25,7 @@ for (const offline of [false, true]) {
     await expect(legend).toBeHidden();
     await connections.locator('.connection-help summary').click();
     await expect(legend).toBeVisible();
-    await expect(legend.locator('.edge-legend-item')).toHaveCount(7);
+    await expect(legend.locator('.edge-legend-item')).toHaveCount(13);
     await connections.locator('.connection-help summary').click();
     await expect(legend).toBeHidden();
     await expect(connections.locator('.connection-help summary')).toBeVisible();
