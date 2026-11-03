@@ -23,12 +23,12 @@ gh workflow run release.yml --repo tqer39/omnodi --ref main -f version=0.2.0
 権限は対象ジョブの `GITHUB_TOKEN` に限定し、追加の PAT や GitHub App の権限変更は不要です。
 
 1. **prepare**：対象 SHA の main CI 成功、package/lockfile の版、日本語ノートを確認し、`v<version>` タグを作成します。同名タグが別 SHA を指す場合は停止します。
-2. **publish**：バージョン固定タグだけを GHCR に配布します。既存の版は両 CPU の版・リビジョン・manifest/config の digest を照合し、一致すればビルドせず再利用します。404 以外の通信・認証・レート制限エラーを未公開とは解釈しません。
+2. **publish**：`GITHUB_TOKEN` で認証して既存イメージを照合し、バージョン固定タグだけを GHCR に配布します。初回配布前は匿名トークンの取得が403になるため、事前照合には匿名アクセスを使いません。既存の版は両 CPU の版・リビジョン・manifest/config の digest を照合し、一致すればビルドせず再利用します。404 以外の通信・認証・レート制限エラーを未公開とは解釈しません。
 3. **verify**：`ubuntu-24.04` の amd64 と `ubuntu-24.04-arm` の arm64 で、空の Docker 認証設定を使って匿名 pull します。配布 digest に固定して HTTP・API 保護・非 root・ブラウザー操作・DSL 保存/読み込み・healthcheck・マウントを検証し、前後でバージョンタグが同じ digest を指していることも確認します。
 4. **finalize**：両 CPU が成功した後だけ、タグと digest を再確認します。安定版は検証済み index をそのまま `latest` にコピーし、日本語 GitHub Release を公開します。プレリリースは `latest` と GitHub の Latest Release を更新しません。既存の `latest` より古い安定版や同じ版の別 digest は拒否します。
 
 `GITHUB_TOKEN` でのタグ作成による push イベントは別ワークフローを起動しないため、全工程を同じワークフロー内の依存ジョブでつないでいます。
-パッケージは Public である必要があります。改名前の `infra-canvas` パッケージは公開済みですが、`omnodi` パッケージは未公開です。Omnodi 名での初回配布時は Public 設定と匿名取得を確認してください。他のリポジトリへ導入する際の初回 Public 設定は管理者が行い、パイプラインはアクセス設定を変更しません。
+パッケージは Public である必要があります。改名前の `infra-canvas` パッケージは公開済みですが、`omnodi` パッケージは未公開です。Omnodi 名での初回配布時は publish 完了後にパッケージの設定画面で Public に変更し、匿名取得を確認してください。初期状態は Private のため、verify が失敗した場合は Public 設定後に同じ実行の失敗ジョブを再実行します。他のリポジトリへ導入する際の初回 Public 設定は管理者が行い、パイプラインはアクセス設定を変更しません。
 
 ## 失敗・再実行
 
