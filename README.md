@@ -5,10 +5,9 @@
 React Flow が探索操作を、ELK.js が境界を含む自動配置を担当します。
 
 旧名称は Infra Canvas です。CLI・パッケージ名は `omnodi`、リポジトリは `tqer39/omnodi` に変更しました。
-公開済みの v0.1.0・v0.1.1 の Docker イメージは、引き続き `ghcr.io/tqer39/infra-canvas` から取得します。
-Omnodi 名の Docker イメージはまだ公開していません。
+Docker イメージは `ghcr.io/tqer39/omnodi` から取得できます。
 
-[v0.1.1 を公開しました](https://github.com/tqer39/omnodi/releases/tag/v0.1.1)。主な機能・対応環境はリリースノートを参照してください。
+[v0.2.0 を公開しました](https://github.com/tqer39/omnodi/releases/tag/v0.2.0)。主な機能・対応環境はリリースノートを参照してください。
 
 本体は [MIT License](LICENSE) です。商用利用も可能です。
 同梱アイコンなどには提供元の別条件が適用されます。
@@ -19,14 +18,10 @@ Omnodi 名の Docker イメージはまだ公開していません。
 
 Docker が動作する環境で実行します。clone・mise・Node.js のインストールは不要です。
 イメージは `linux/arm64`（Apple Silicon など）と `linux/amd64` に対応し、CPU に合うものが選択されます。
-[GHCR の公開イメージ](https://github.com/tqer39/omnodi/pkgs/container/infra-canvas)をログインなしで取得できます。
-
-以下は改名前に公開した v0.1.1 を起動するため、イメージ名は `infra-canvas` のままです。
-`--name omnodi` は起動するコンテナーの名前です。イメージ名を `ghcr.io/tqer39/omnodi:0.1.1` に置き換えないでください。
-改名後の最新コードを使う場合は、下記の「Docker イメージのビルド・検証・配布」に従ってローカルでビルドしてください。
+[GHCR の公開イメージ](https://github.com/tqer39/omnodi/pkgs/container/omnodi)をログインなしで取得できます。
 
 ```bash
-docker run --rm --name omnodi -p 127.0.0.1:5180:5180 ghcr.io/tqer39/infra-canvas:0.1.1
+docker run --rm --name omnodi -p 127.0.0.1:5180:5180 ghcr.io/tqer39/omnodi:0.2.0
 ```
 
 ブラウザーで `http://127.0.0.1:5180/` を開くと AWS サンプルを表示します。終了は `Ctrl+C` です。
@@ -37,8 +32,8 @@ docker run --rm --name omnodi -p 127.0.0.1:5180:5180 ghcr.io/tqer39/infra-canvas
 公開先は端末内だけに限定しています。コンテナー内部は `0.0.0.0` で待ち受けますが、
 ホスト側の `-p 127.0.0.1:5180:5180` を維持してください。認証付きの共有サーバー用途には対応していません。
 5180 が使用中なら `-p 127.0.0.1:5181:5180` とし、ブラウザーでは 5181 を開きます。
-上記は `:0.1.1` にバージョンを固定しています。最新の安定版を使う場合は `:latest` に置き換えてください。
-`latest` を更新する場合は、起動前に `docker pull ghcr.io/tqer39/infra-canvas:latest` を実行します。
+上記は `:0.2.0` にバージョンを固定しています。最新の安定版を使う場合は `:latest` に置き換えてください。
+`latest` を更新する場合は、起動前に `docker pull ghcr.io/tqer39/omnodi:latest` を実行します。
 
 Docker 版はブラウザーでの図の編集・保存・SVG/PNG出力・印刷と、CLI の validate・import・dsl・html・svg に対応します。
 CLI の png/pdf 用の headless Chromium は同梱しません。CLI での実行が必要な場合は開発環境を使用してください。
@@ -57,7 +52,7 @@ GitHub の公開リポジトリは取得でき、非公開リポジトリは画�
 カレントディレクトリを読み取り専用でマウントします（PowerShell では `$(pwd)` を `${PWD}` に置き換えます）。
 
 ```bash
-docker run --rm -p 127.0.0.1:5180:5180 --mount "type=bind,source=$(pwd),target=/data,readonly" ghcr.io/tqer39/infra-canvas:0.1.1 preview /data/example.infra --host 0.0.0.0 --port 5180
+docker run --rm -p 127.0.0.1:5180:5180 --mount "type=bind,source=$(pwd),target=/data,readonly" ghcr.io/tqer39/omnodi:0.2.0 preview /data/example.infra --host 0.0.0.0 --port 5180
 ```
 
 コンテナーの既定ユーザーは UID/GID 1000 です。Linux ではマウントするファイル・ディレクトリーをこのユーザーが読める必要があります。
@@ -88,8 +83,10 @@ main CI の成功と版・日本語ノートを確認してタグを作成し、
 プレリリースは `latest` を更新しません。通常の Docker CI と手動のタグ push は配布を行いません。
 既存タグ・イメージ・Release は SHA と digest を照合して再利用し、不一致は上書きせず停止します。
 準備・再実行・権限の詳細は [リリース運用](docs/releasing.md) を参照してください。
-GHCR パッケージは Public で公開済みです。`0.1.1` と `latest` をログインなしで取得でき、同じ配布 digest を参照します。
+GHCR パッケージは Public で公開済みです。`0.2.0` と `latest` をログインなしで取得でき、同じ配布 digest を参照します。
 パイプラインは可視性やリポジトリのアクセス設定を変更しません。
+旧配布先 `ghcr.io/tqer39/infra-canvas` は v0.1.0・v0.1.1 の互換用に残していますが、今後の更新は `ghcr.io/tqer39/omnodi` を使用してください。
+改名・配布先の調査結果は [Docker 配布の移行監査](docs/docker-release-migration-audit.md) を参照してください。
 
 ## CVE の公開情報を図で見る
 

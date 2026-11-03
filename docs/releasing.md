@@ -28,7 +28,7 @@ gh workflow run release.yml --repo tqer39/omnodi --ref main -f version=0.2.0
 4. **finalize**：両 CPU が成功した後だけ、タグと digest を再確認します。安定版は検証済み index をそのまま `latest` にコピーし、日本語 GitHub Release を公開します。プレリリースは `latest` と GitHub の Latest Release を更新しません。既存の `latest` より古い安定版や同じ版の別 digest は拒否します。
 
 `GITHUB_TOKEN` でのタグ作成による push イベントは別ワークフローを起動しないため、全工程を同じワークフロー内の依存ジョブでつないでいます。
-パッケージは Public である必要があります。改名前の `infra-canvas` パッケージは公開済みですが、`omnodi` パッケージは未公開です。Omnodi 名での初回配布時は publish 完了後にパッケージの設定画面で Public に変更し、匿名取得を確認してください。初期状態は Private のため、verify が失敗した場合は Public 設定後に同じ実行の失敗ジョブを再実行します。他のリポジトリへ導入する際の初回 Public 設定は管理者が行い、パイプラインはアクセス設定を変更しません。
+パッケージは Public である必要があります。`ghcr.io/tqer39/omnodi` は v0.2.0 から Public で配布しています。新しいパッケージ名での初回配布時は publish 完了後にパッケージの可視性を確認し、Private の場合は設定画面で Public に変更して匿名取得を確認してください。verify が非公開状態のため失敗した場合は Public 設定後に同じ実行の失敗ジョブを再実行します。他のリポジトリへ導入する際の初回 Public 設定は管理者が行い、パイプラインはアクセス設定を変更しません。
 
 ## 失敗・再実行
 
@@ -49,10 +49,10 @@ GitHub Actions の **Re-run failed jobs** または **Re-run all jobs** で同�
 実際の公開イメージの読み取り検証例です。`GITHUB_SHA` はそのイメージのソースで、ローカル作業ツリーの SHA ではありません。このコマンドはタグ作成・配布・Release 公開を行いません。
 
 ```bash
-RELEASE_VERSION=0.1.0 \
-GITHUB_REPOSITORY=tqer39/infra-canvas \
-GITHUB_SHA=e49ec920acb0c930cf0721e2ebca1d4a2e05a51e \
-IMAGE_DIGEST=sha256:66fe8b3cbac5d3dc845275b6a941fa79f6785df0e828e4a551f33a6c0fc64de9 \
+RELEASE_VERSION=0.2.0 \
+GITHUB_REPOSITORY=tqer39/omnodi \
+GITHUB_SHA=e19e233ce1bc04593495d100b0ff3ff40bd4de50 \
+IMAGE_DIGEST=sha256:f252f2a5695e0c71bc4bd12b5c345c5b8261a01387b49c20465f173d0807ba23 \
 mise run release:verify
 ```
 

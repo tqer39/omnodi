@@ -198,7 +198,7 @@ export async function prepare(ctx, { api, read = (path) => readFileSync(path, 'u
 export function releaseBody(ctx, digest, notes) {
   assert.match(digest, digestPattern);
   // 公開済みReleaseの再実行を識別できるよう、本文の内部マーカーは旧名を維持する。
-  return `${notes.trim()}\n\n## Docker で起動する\n\n\`\`\`bash\ndocker run --rm --name omnodi -p 127.0.0.1:5180:5180 ${ctx.image}:${ctx.version}\n\`\`\`\n\n<http://127.0.0.1:5180/> を開いてください。終了は Ctrl+C、編集結果は「DSL を保存」でダウンロードできます。\n\n## 対応環境・検証結果\n\n- linux/arm64・linux/amd64 に対応し、Docker が CPU に合うイメージを選択します。\n- 両 CPU のネイティブ GitHub-hosted runner で、GHCR から匿名 pull した digest 固定イメージの起動・HTTP・API 保護・非 root・図の編集・DSL 保存/読み込み・healthcheck・読み取り専用マウントを検証しました。\n- CLI の PNG/PDF 用 Chromium は同梱しません。ブラウザーからの PNG 出力・印刷を利用できます。\n- イメージ digest: \`${digest}\`\n- ソース: [${ctx.sha}](https://github.com/${ctx.repo}/commit/${ctx.sha})\n- [使い方・ライセンス](https://github.com/${ctx.repo}/blob/${ctx.tag}/README.md)\n\n<!-- infra-canvas-release ${ctx.tag} ${ctx.sha} ${digest} -->\n`;
+  return `${notes.trim()}\n\n## Docker で起動する\n\n\`\`\`bash\ndocker run --rm --name omnodi -p 127.0.0.1:5180:5180 ${ctx.image}:${ctx.version}\n\`\`\`\n\n<http://127.0.0.1:5180/> を開いてください。終了は Ctrl+C、編集結果は「DSL を保存」でダウンロードできます。\n\n## 対応環境・検証結果\n\n- linux/arm64・linux/amd64 に対応し、Docker が CPU に合うイメージを選択します。\n- 両 CPU のネイティブ GitHub-hosted runner で、GHCR から匿名 pull した digest 固定イメージの起動・HTTP・API 保護・非 root・図の編集・DSL 保存/読み込み・healthcheck・読み取り専用マウントを検証しました。\n- CLI の PNG/PDF 用 Chromium は同梱しません。ブラウザーからの PNG 出力・印刷を利用できます。\n- イメージ digest: \`${digest}\`\n- ソース: [${ctx.sha}](https://github.com/${ctx.repo}/commit/${ctx.sha})\n- [最新の使い方・ライセンス](https://github.com/${ctx.repo}/blob/main/README.md)\n\n<!-- infra-canvas-release ${ctx.tag} ${ctx.sha} ${digest} -->\n`;
 }
 export async function finalize(
   ctx,
