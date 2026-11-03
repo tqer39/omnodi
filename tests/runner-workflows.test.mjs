@@ -125,3 +125,15 @@ test('集約はmatrix全体の成功だけを許可し、失敗・中止・ス�
     assert.equal(result.status, status === 'success' ? 0 : 1, status);
   }
 });
+
+// A clean icon-update runner must obtain the ignored CLI before check uses it.
+test('アイコン更新の検証は差分がある場合に CLI を準備し、現在の整形タスクを使う', () => {
+  const steps = icons.jobs.update.steps;
+  const install = steps.findIndex((step) => step.run === 'mise run standards:install');
+  const check = steps.findIndex((step) => step.run === 'mise run check');
+  assert.ok(install >= 0 && install < check);
+  assert.equal(steps[install].if, steps[check].if);
+  assert.match(steps[install].if, /collected.outputs.changed == 'true'/);
+  assert.ok(steps.some((step) => step.run === 'mise run format'));
+  assert.ok(!steps.some((step) => step.run === 'mise run fmt'));
+});
