@@ -19,6 +19,7 @@ const reserved = new Set([
   'line',
   'provenance',
   'unresolved',
+  'resolved',
 ]);
 const names: Record<string, string> = {
   shape: '図形',

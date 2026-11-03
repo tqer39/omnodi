@@ -1306,6 +1306,12 @@ function App() {
       setDiagnostics([error instanceof Error ? error.message : String(error)]);
     }
   };
+  const unresolvedResources = (diagram?.resources ?? []).filter(
+    (resource) => resource.unresolved?.length,
+  );
+  const resolvedResources = (diagram?.resources ?? []).filter(
+    (resource) => resource.resolved?.length,
+  );
   const selectedRelations = [
     ...(diagram?.connections ?? []),
     ...(graph?.connections.filter(
@@ -1408,6 +1414,51 @@ function App() {
     const result = parseDSL(source);
     setDiagnostics(result.diagnostics.map((item) => `${item.line}:${item.column} ${item.message}`));
     if (result.diagram) acceptDiagram(result.diagram);
+  };
+  const setResolution = (id: string, index: number, resolve: boolean) => {
+    if (!diagram) return;
+    if (source !== serializeDSL(diagram)) {
+      setDiagnostics(['DSL エディターに未反映の変更があります。先に解析して反映してください。']);
+      return;
+    }
+    const next: Diagram = {
+      ...diagram,
+      resources: diagram.resources.map((item) => {
+        if (item.id !== id) return item;
+        const unresolved = [...(item.unresolved ?? [])];
+        const resolved = [...(item.resolved ?? [])];
+        const from = resolve ? unresolved : resolved;
+        const to = resolve ? resolved : unresolved;
+        if (index < 0 || index >= from.length) return item;
+        to.push(from.splice(index, 1)[0]!);
+        const attributes = { ...item.attributes };
+        delete attributes.unresolved;
+        delete attributes.resolved;
+        return { ...item, attributes, unresolved, resolved };
+      }),
+    };
+    validateDiagram(next);
+    const nextSource = serializeDSL(next);
+    const parsed = parseDSL(nextSource);
+    if (!parsed.diagram) {
+      setDiagnostics(parsed.diagnostics.map((item) => item.message));
+      return;
+    }
+    next.resources = next.resources.map((item) => ({
+      ...item,
+      location: parsed.diagram!.resources.find((resource) => resource.id === item.id)?.location,
+    }));
+    next.connections = next.connections.map((item, index) => ({
+      ...item,
+      location: parsed.diagram!.connections[index]?.location,
+    }));
+    autoFitContext.current = { diagram: next, view, scope };
+    dispatchHistory({
+      type: 'commit',
+      update: (current) => ({ ...current, diagram: next, source: nextSource }),
+    });
+    setSource(nextSource);
+    setDiagnostics([]);
   };
   const editItem = (
     id: string,
@@ -2470,6 +2521,50 @@ function App() {
           )}
         </div>
         <aside className="detail-panel">
+          {unresolvedResources.length > 0 && (
+            <details className="unresolved-navigation">
+              <summary>確認が必要な情報 ({unresolvedResources.length} 要素)</summary>
+              <p>取り込みや設計で未解決の情報がある要素を表示します。</p>
+              {unresolvedResources.map((resource) => (
+                <button
+                  type="button"
+                  key={resource.id}
+                  onClick={(event) => {
+                    const list = event.currentTarget.closest('details');
+                    if (list) list.open = false;
+                    focusResource(resource.id);
+                  }}
+                >
+                  <strong>{resource.label}</strong>
+                  <span>
+                    {resource.type} · {resource.id} · {resource.unresolved!.length} 件
+                  </span>
+                </button>
+              ))}
+            </details>
+          )}
+          {resolvedResources.length > 0 && (
+            <details className="unresolved-navigation resolved-navigation">
+              <summary>解決済みの情報 ({resolvedResources.length} 要素)</summary>
+              <p>確認済みの記録を表示し、未解決に戻せます。</p>
+              {resolvedResources.map((resource) => (
+                <button
+                  type="button"
+                  key={resource.id}
+                  onClick={(event) => {
+                    const list = event.currentTarget.closest('details');
+                    if (list) list.open = false;
+                    focusResource(resource.id);
+                  }}
+                >
+                  <strong>{resource.label}</strong>
+                  <span>
+                    {resource.type} · {resource.id} · {resource.resolved!.length} 件
+                  </span>
+                </button>
+              ))}
+            </details>
+          )}
           {graph?.resources.some((resource) => graph.collapsed.includes(resource.id)) && (
             <section className="collapsed-navigation" aria-label="折りたたみ中の境界">
               <h2>折りたたみ中</h2>
@@ -2617,6 +2712,43 @@ function App() {
                   </p>
                 )}
               </section>
+              {selectedResource.unresolved?.length || selectedResource.resolved?.length ? (
+                <section aria-label="確認が必要な情報" className="unresolved-detail">
+                  <h3>確認が必要な情報</h3>
+                  {selectedResource.unresolved?.map((message, index) => (
+                    <div className="resolution-item" key={`${index}-${message}`}>
+                      <p className="warning-copy">{message}</p>
+                      <button
+                        type="button"
+                        onClick={() => setResolution(selectedResource.id, index, true)}
+                        aria-label={`${message}を解決済みにする`}
+                      >
+                        解決済みにする
+                      </button>
+                    </div>
+                  ))}
+                  {!!selectedResource.resolved?.length && <h4>解決済み</h4>}
+                  {selectedResource.resolved?.map((message, index) => (
+                    <div className="resolution-item" key={`${index}-${message}`}>
+                      <p>{message}</p>
+                      <button
+                        type="button"
+                        onClick={() => setResolution(selectedResource.id, index, false)}
+                        aria-label={`${message}を未解決に戻す`}
+                      >
+                        未解決に戻す
+                      </button>
+                    </div>
+                  ))}
+                  <p>
+                    下の「取り込み元」と元の設定を確認し、必要な内容を「属性」で設計値として補足できます。
+                  </p>
+                  <p>
+                    属性を編集しても未解決情報は自動では消えません。解決済みは確認の記録であり、元の
+                    Terraform は変更されません。
+                  </p>
+                </section>
+              ) : null}
               {(diagram?.resources ?? []).filter(
                 (resource) =>
                   resource.type === 'sg' &&
@@ -2723,16 +2855,6 @@ function App() {
                   </div>
                 )}
               </dl>
-              {selectedResource.unresolved?.length ? (
-                <>
-                  <h3>未解決情報</h3>
-                  {selectedResource.unresolved.map((message) => (
-                    <p className="warning-copy" key={message}>
-                      {message}
-                    </p>
-                  ))}
-                </>
-              ) : null}
             </>
           ) : (
             <div className="empty-details">

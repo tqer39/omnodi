@@ -58,7 +58,8 @@ export function validateDiagram(value: unknown): Diagram {
       !attributes(resource.attributes) ||
       (resource.parentId !== undefined && !identifier(resource.parentId)) ||
       (resource.location !== undefined && !location(resource.location)) ||
-      (resource.unresolved !== undefined && !strings(resource.unresolved))
+      (resource.unresolved !== undefined && !strings(resource.unresolved)) ||
+      (resource.resolved !== undefined && !strings(resource.resolved))
     )
       throw new Error('リソースの ID・種別・ラベル・有限値属性・ソース位置を確認してください。');
     resourceContent(resource);

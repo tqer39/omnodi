@@ -69,6 +69,7 @@ export const arrayAttributes = new Set([
   'tags',
   'securityGroups',
   'unresolved',
+  'resolved',
   'dependsOn',
   'ingress',
   'egress',

@@ -74,16 +74,16 @@ SG の関連や許可規則だけで通信成立を断定しません。
 反映した変更は「元に戻す」で取り消せます。
 未知のアイコン名は保持されますが、同梱アイコンがないため代替表示になります。
 
-| 型         | 属性名                                                                                   | 用途                 |
-| ---------- | ---------------------------------------------------------------------------------------- | -------------------- |
-| 文字列     | `description`, `region`, `az`, `cidr`, `protocol`                                        | 説明、配置設定       |
-| 文字列     | `account`, `project`, `subscription`, `scope`, `environment`                             | 管理スコープ         |
-| 文字列     | `status`, `network`, `routeEvidence`, `provider`, `role`, `url`, `version`, `subnetType` | 表示メタデータ       |
-| 文字列配列 | `subnets`, `members`, `securityGroups`, `dependsOn`                                      | リソース ID 参照     |
-| 文字列配列 | `tags`, `unresolved`                                                                     | タグ、未解決情報     |
-| 数値       | `port`, `width`, `height`, `x`, `y`, `line`                                              | 属性情報・座標固定   |
-| boolean    | `public`, `unknown`, `fixed`                                                             | 属性情報・座標固定   |
-| 文字列     | `meta.*`                                                                                 | 拡張用のテキスト属性 |
+| 型         | 属性名                                                                                   | 用途                       |
+| ---------- | ---------------------------------------------------------------------------------------- | -------------------------- |
+| 文字列     | `description`, `region`, `az`, `cidr`, `protocol`                                        | 説明、配置設定             |
+| 文字列     | `account`, `project`, `subscription`, `scope`, `environment`                             | 管理スコープ               |
+| 文字列     | `status`, `network`, `routeEvidence`, `provider`, `role`, `url`, `version`, `subnetType` | 表示メタデータ             |
+| 文字列配列 | `subnets`, `members`, `securityGroups`, `dependsOn`                                      | リソース ID 参照           |
+| 文字列配列 | `tags`, `unresolved`, `resolved`                                                         | タグ、未解決・解決済み情報 |
+| 数値       | `port`, `width`, `height`, `x`, `y`, `line`                                              | 属性情報・座標固定         |
+| boolean    | `public`, `unknown`, `fixed`                                                             | 属性情報・座標固定         |
+| 文字列     | `meta.*`                                                                                 | 拡張用のテキスト属性       |
 
 `x`、`y` と `fixed=true` で座標を固定できます。親内では相対座標です。
 `width` と `height` は属性として保持しますが、カード寸法の固定指定は未対応です。
@@ -93,8 +93,9 @@ Terraform アダプターの属性として `terraformType`、`availability_zone
 
 取り込み元は `sourceKind="plan"` / `"state"` / `"static"` / `"design"` と、
 `repository`、`commit`、`root`、`address`、`file`、`line` に保存します。
-`serializeDSL` は構成モデルの `provenance` と `unresolved` をこれらの属性へ書き出します。
+`serializeDSL` は構成モデルの `provenance` と `unresolved`・`resolved` をこれらの属性へ書き出します。
 `parseDSL` は同じ情報を復元します。ソース位置が未確定なら省略します。
+`resolved` は利用者が確認済みにした記録であり、元の Terraform の変更や検証結果を意味しません。
 
 ## 型付き接続
 

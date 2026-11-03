@@ -672,6 +672,57 @@ textarea:focus-visible {
   font-size: 8px;
   color: #a67b30;
 }
+.unresolved-navigation {
+  margin-bottom: 16px;
+  padding: 10px;
+  border: 1px solid #e4c998;
+  border-radius: 6px;
+  background: #fffaf0;
+}
+.unresolved-navigation summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.resolved-navigation {
+  border-color: #a9cfc2;
+  background: #f2faf6;
+}
+.unresolved-navigation p,
+.unresolved-detail p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.unresolved-navigation button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.unresolved-navigation button span {
+  font-size: 11px;
+}
+.unresolved-detail {
+  margin: 12px 0;
+  padding: 8px 10px;
+  border-left: 3px solid #c48d2e;
+  background: #fffaf0;
+}
+.resolution-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 8px;
+}
+.resolution-item p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .canvas-footer {
   display: flex;
   align-items: center;
