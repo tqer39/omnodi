@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { parse } from 'yaml';
 import {
   anonymousRegistry,
+  authenticatedRegistry,
   compareVersions,
   context,
   finalize,
@@ -232,6 +233,38 @@ test('404だけを未公開と扱い、認証失敗・レート制限・障害�
   await assert.rejects(api('git/ref/tags/v0.2.0', { optional: true }), /HTTP 500/);
 });
 
+test('初回配布の事前照合は認証付きで404を確認し、非公開の既存イメージも照合できる', async () => {
+  const calls = [];
+  const registry = authenticatedRegistry(ctx.repo, 'publisher', 'test-token', async (url, req) => {
+    calls.push({ url, req });
+    if (url.includes('/token?')) return Response.json({ token: 'registry-token' });
+    if (url.endsWith('/manifests/missing')) return new Response(null, { status: 404 });
+    return Response.json(index);
+  });
+  assert.equal(await registry.manifest('missing', true), null);
+  assert.deepEqual((await registry.manifest(ctx.version)).value, index);
+  assert.equal(
+    calls[0].req.headers.Authorization,
+    `Basic ${Buffer.from('publisher:test-token').toString('base64')}`,
+  );
+  assert.equal(calls[1].req.headers.Authorization, 'Bearer registry-token');
+  assert.equal(calls[2].req.headers.Authorization, 'Bearer registry-token');
+  assert.throws(() => authenticatedRegistry(ctx.repo, 'publisher', ''), /GH_TOKEN/);
+});
+
+test('認証付き事前照合もトークン・manifestの認証失敗や障害を未配布と判断しない', async () => {
+  for (const status of [401, 403, 429, 500]) {
+    for (const failToken of [true, false]) {
+      const registry = authenticatedRegistry(ctx.repo, 'publisher', 'test-token', async (url) =>
+        url.includes('/token?') && !failToken
+          ? Response.json({ token: 'registry-token' })
+          : new Response(null, { status }),
+      );
+      await assert.rejects(registry.manifest(ctx.version, true), /HTTP/);
+    }
+  }
+});
+
 test('公開の途中で失敗しても、再実行はイメージを昇格し直さず Release を完成する', async () => {
   const h = harness({
     tag: sha,
@@ -345,6 +378,8 @@ test('匿名検証は書込権限と login を持たず、publish は latest を
   assert.equal(build.if, "steps.plan.outputs.exists != 'true'");
   assert.ok(!build.with.tags.includes('latest'));
   assert.equal(workflow.jobs.publish.permissions.contents, 'read');
+  const plan = workflow.jobs.publish.steps.find((s) => s.id === 'plan');
+  assert.equal(plan.env.GH_TOKEN, '${{ secrets.GITHUB_TOKEN }}');
   assert.equal(workflow.jobs.finalize.permissions.contents, 'write');
   assert.equal(workflow.jobs.finalize.permissions.packages, 'write');
 });

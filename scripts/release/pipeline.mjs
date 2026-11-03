@@ -69,17 +69,31 @@ export function githubClient(repo, token, fetchImpl = fetch) {
   };
 }
 export function anonymousRegistry(repo, fetchImpl = fetch) {
+  return registryClient(repo, fetchImpl);
+}
+export function authenticatedRegistry(repo, username, token, fetchImpl = fetch) {
+  assert.ok(username && token, 'GHCR の事前照合には GITHUB_ACTOR と GH_TOKEN が必要です');
+  return registryClient(
+    repo,
+    fetchImpl,
+    `Basic ${Buffer.from(`${username}:${token}`).toString('base64')}`,
+  );
+}
+function registryClient(repo, fetchImpl, authorization) {
   const name = repo.toLowerCase();
   let bearer;
   const get = async (kind, ref, optional = false) => {
     if (!bearer) {
       const auth = await fetchImpl(
         `https://ghcr.io/token?service=ghcr.io&scope=${encodeURIComponent(`repository:${name}:pull`)}`,
-        { signal: AbortSignal.timeout(30000) },
+        {
+          ...(authorization ? { headers: { Authorization: authorization } } : {}),
+          signal: AbortSignal.timeout(30000),
+        },
       );
       assert.ok(
         auth.ok,
-        `GHCR 匿名認証: HTTP ${auth.status}。パッケージの Public 設定を確認してください`,
+        `GHCR ${authorization ? '認証' : '匿名認証'}: HTTP ${auth.status}。認証情報・パッケージの Public 設定を確認してください`,
       );
       bearer = (await auth.json()).token;
       assert.ok(bearer);
@@ -256,7 +270,9 @@ export async function run(command, env = process.env) {
     output(ctx);
   } else if (command === 'plan' || command === 'verify') {
     const image = await inspectImage(
-      anonymousRegistry(ctx.repo),
+      command === 'plan'
+        ? authenticatedRegistry(ctx.repo, env.GITHUB_ACTOR, env.GH_TOKEN)
+        : anonymousRegistry(ctx.repo),
       ctx.version,
       ctx,
       command === 'plan',

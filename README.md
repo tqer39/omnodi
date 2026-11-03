@@ -21,6 +21,10 @@ Docker が動作する環境で実行します。clone・mise・Node.js のイ�
 イメージは `linux/arm64`（Apple Silicon など）と `linux/amd64` に対応し、CPU に合うものが選択されます。
 [GHCR の公開イメージ](https://github.com/tqer39/omnodi/pkgs/container/infra-canvas)をログインなしで取得できます。
 
+以下は改名前に公開した v0.1.1 を起動するため、イメージ名は `infra-canvas` のままです。
+`--name omnodi` は起動するコンテナーの名前です。イメージ名を `ghcr.io/tqer39/omnodi:0.1.1` に置き換えないでください。
+改名後の最新コードを使う場合は、下記の「Docker イメージのビルド・検証・配布」に従ってローカルでビルドしてください。
+
 ```bash
 docker run --rm --name omnodi -p 127.0.0.1:5180:5180 ghcr.io/tqer39/infra-canvas:0.1.1
 ```
