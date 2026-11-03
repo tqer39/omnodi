@@ -108,7 +108,7 @@ mise run setup
 mise run dev
 ```
 
-セットアップは Go 1.27.3 で固定版 dev-standards v0.4.1 をビルドして検証用 CLI を配置し、依存インストール、Git フック登録、AIルール生成、headless Chromium の準備、ビルドを行い、再実行できます。
+セットアップは Go 1.27.3 で`.standards/lock.json` に固定した採用版 dev-standards をビルドして検証用 CLI を配置し、依存インストール、Git フック登録、AIルール生成、headless Chromium の準備、ビルドを行い、再実行できます。
 Linux で Chromium の OS 依存が不足する場合は `mise run browser:install-ci` を使います。
 macOS・Linux・Windows の共通入口は mise です（動作実測は macOS）。
 
