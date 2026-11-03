@@ -111,6 +111,18 @@ describe('DSL', () => {
     assert.deepEqual(restored.unresolved, ['account']);
     assert.deepEqual(restored.resolved, ['subnet']);
   });
+  it('解決済み記録の置換・削除を DSL に反映し、属性だけの記録も保持する', () => {
+    const diagram = parseDSL('diagram "確認" { aws.ec2 api resolved=["account"] }').diagram!;
+    const resource = diagram.resources[0]!;
+    resource.resolved = ['subnet'];
+    assert.deepEqual(parseDSL(serializeDSL(diagram)).diagram!.resources[0]!.resolved, ['subnet']);
+    resource.resolved = [];
+    const cleared = serializeDSL(diagram);
+    assert.ok(!cleared.includes('resolved='));
+    assert.equal(parseDSL(cleared).diagram!.resources[0]!.resolved, undefined);
+    delete resource.resolved;
+    assert.deepEqual(parseDSL(serializeDSL(diagram)).diagram!.resources[0]!.resolved, ['account']);
+  });
   for (const [input, code, line, column] of [
     ['diagram "x" {\n aws.ecs x\n aws.rds x\n}', 'id.duplicate', 3, 10],
     ['diagram "x" {\n aws.ecs x subnets=[missing]\n}', 'reference.missing', 2, 21],
