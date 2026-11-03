@@ -402,6 +402,9 @@ test('生成した日本語 Release ノートは Markdown として有効で版�
   assert.deepEqual(Object.values(result).flat(), []);
   assert.ok(body.includes(`${ctx.image}:${ctx.version}`));
   assert.ok(body.includes(digest));
+  // 配布後に更新するクイックスタートへ誘導し、公開前のタグ内READMEを参照しない。
+  assert.ok(body.includes(`https://github.com/${ctx.repo}/blob/main/README.md`));
+  assert.ok(!body.includes(`/blob/${ctx.tag}/README.md`));
 });
 
 test('標準入力から import しても公開用 CLI を実行しない', () => {
