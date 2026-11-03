@@ -569,6 +569,7 @@ function RoutedConnection(props: EdgeProps) {
 }
 const edgeTypes = { routed: RoutedConnection };
 
+/** 図・DSL・表示履歴を同期し、選択対象の編集と候補からの連続追加を提供する。 */
 function App() {
   const [showActionLabels, setShowActionLabels] = useState(() => {
     try {
@@ -1258,6 +1259,7 @@ function App() {
     () => Boolean(diagram && source !== serializeDSL(diagram)),
     [diagram, source],
   );
+  /** 未反映の DSL を保護し、候補の追加と配置先の表示・選択を一つの履歴に反映する。 */
   const addSuggestion = (type: string) => {
     if (!diagram || !selected || suggestionBlocked) return;
     try {
