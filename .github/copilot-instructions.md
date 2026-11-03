@@ -15,7 +15,7 @@
 
 ## 開発・検証
 
-- セットアップは `mise bootstrap`、起動は `mise run dev`。実行コマンドの正本は `mise.toml` に集約し、npm scripts は互換入口にする。
+- セットアップは `mise run setup`、起動は `mise run dev`。lint・format・test・build の実体は npm scripts、それ以外の実行コマンドは `mise.toml` に置く。共通の入口は dev-standards が生成する mise タスクを使う。
 - 検証は `mise run check` と `mise run test:browser`。Markdown 編集後は `mise run lint`。
 - tsc、Oxlint、Oxfmt、markdownlint を継続する。チェックを削って CI を短縮しない。
 - CI は GitHub-hosted runner を使う。ブラウザー CI は別ランナーの3シャード、各2ワーカー。共有生成物は開始時に一度生成する。

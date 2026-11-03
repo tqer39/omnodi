@@ -43,7 +43,9 @@ jobs:
           fi
       - run: mise run install
         if: steps.collected.outputs.changed == 'true'
-      - run: mise run fmt
+      - run: mise run standards:install
+        if: steps.collected.outputs.changed == 'true'
+      - run: mise run format
         if: steps.collected.outputs.changed == 'true'
       - name: 型検査・lint・更新処理の回帰テスト・ビルド
         run: mise run check
