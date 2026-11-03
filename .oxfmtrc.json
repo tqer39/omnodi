@@ -11,6 +11,11 @@
     "src/assets/*.svg",
     "src/assets/manifest.json",
     "docs/screenshots/**",
-    "package-lock.json"
+    "package-lock.json",
+    "mise.toml",
+    ".standards/**",
+    ".claude/rules/**",
+    ".devin/rules/**",
+    ".github/instructions/**"
   ]
 }

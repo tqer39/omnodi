@@ -2,7 +2,6 @@ import { lint } from 'markdownlint/promise';
 import { readdir } from 'node:fs/promises';
 const files = [
   'README.md',
-  'AGENTS.md',
   '.github/copilot-instructions.md',
   ...(
     await readdir('.claude/rules', { recursive: true }).catch((error) => {
@@ -25,7 +24,11 @@ const files = [
     .map((f) => `.rulesync/rules/${f}`),
   ...(await readdir('docs')).filter((f) => f.endsWith('.md')).map((f) => `docs/${f}`),
 ];
-const result = await lint({ files, config: { default: true, MD013: false } });
+const result = {
+  ...(await lint({ files, config: { default: true, MD013: false } })),
+  // rulesync は非ルートのルールを見出しごと連結するため、H1 が複数並ぶ。
+  ...(await lint({ files: ['AGENTS.md'], config: { default: true, MD013: false, MD025: false } })),
+};
 const errors = Object.entries(result).flatMap(([file, problems]) =>
   problems.map(
     (problem) =>
