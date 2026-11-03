@@ -396,6 +396,7 @@ export function parseDSL(source: string): ParseResult {
             }
           }
           if (Array.isArray(attributes.unresolved)) resource.unresolved = attributes.unresolved;
+          if (Array.isArray(attributes.resolved)) resource.resolved = attributes.resolved;
           try {
             resourceContent(resource);
             validateComputeAttributes(resource);

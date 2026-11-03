@@ -105,9 +105,11 @@ describe('DSL', () => {
       line: 10,
     };
     diagram.resources[0]!.unresolved = ['account'];
+    diagram.resources[0]!.resolved = ['subnet'];
     const restored = parseDSL(serializeDSL(diagram)).diagram!.resources[0]!;
     assert.deepEqual(restored.provenance, diagram.resources[0]!.provenance);
     assert.deepEqual(restored.unresolved, ['account']);
+    assert.deepEqual(restored.resolved, ['subnet']);
   });
   for (const [input, code, line, column] of [
     ['diagram "x" {\n aws.ecs x\n aws.rds x\n}', 'id.duplicate', 3, 10],

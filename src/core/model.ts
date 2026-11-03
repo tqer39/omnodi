@@ -28,6 +28,7 @@ export interface Resource {
   location?: SourceLocation;
   provenance?: Provenance;
   unresolved?: string[];
+  resolved?: string[];
 }
 export const edgeKinds = [
   'traffic',

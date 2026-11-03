@@ -23,6 +23,106 @@ async function blurEditor(page: Page): Promise<void> {
 }
 
 for (const offline of [false, true]) {
+  test(`確認済みの記録は保存・復元でき、未反映 DSL を保護する (${offline ? 'HTML' : '開発画面'})`, async ({
+    page,
+    context,
+  }) => {
+    if (offline) await context.setOffline(true);
+    await page.goto(
+      offline
+        ? 'file://' + resolve('artifacts/aws.html')
+        : `http://127.0.0.1:${process.env.INFRA_TEST_PORT ?? '5188'}`,
+    );
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'review.infra',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        'diagram "確認" {\n aws.ec2 api "API" unresolved=["アカウントは未確定", "Subnet は未解決"] sourceKind="plan" file="main.tf"\n}',
+      ),
+    });
+    const navigation = page.locator('.unresolved-navigation:not(.resolved-navigation)');
+    await navigation.locator('summary').click();
+    await navigation.getByRole('button', { name: /API/ }).click();
+    const detail = page.getByRole('region', { name: '確認が必要な情報' });
+    await detail.getByRole('button', { name: 'アカウントは未確定を解決済みにする' }).click();
+    await expect(navigation).toContainText('1 要素');
+    await expect(
+      detail.getByRole('button', { name: 'アカウントは未確定を未解決に戻す' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: '元に戻す', exact: true }).click();
+    await page.locator('.react-flow__node[data-id="api"] .resource-label').click();
+    await expect(
+      detail.getByRole('button', { name: 'アカウントは未確定を解決済みにする' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'やり直す', exact: true }).click();
+    await page.locator('.react-flow__node[data-id="api"] .resource-label').click();
+    await detail.getByRole('button', { name: 'Subnet は未解決を解決済みにする' }).click();
+    await expect(navigation).toHaveCount(0);
+    const resolvedNavigation = page.locator('.resolved-navigation');
+    await expect(resolvedNavigation).toContainText('1 要素');
+    await page.getByRole('button', { name: '選択を解除', exact: true }).click();
+    await resolvedNavigation.locator('summary').click();
+    await resolvedNavigation.getByRole('button', { name: /API/ }).click();
+    await page.getByRole('button', { name: 'DSL を編集', exact: true }).click();
+    const editor = page.getByRole('textbox', { name: 'DSL 入力' });
+    const saved = await editor.inputValue();
+    expect(saved).toContain('resolved=');
+    expect(saved).not.toContain('unresolved=');
+    await editor.fill(saved + '\n# 未反映の下書き');
+    await detail.getByRole('button', { name: 'アカウントは未確定を未解決に戻す' }).click();
+    await expect(page.getByRole('alert')).toContainText('未反映の変更');
+    await expect(editor).toHaveValue(saved + '\n# 未反映の下書き');
+    await page.getByRole('button', { name: '診断を閉じる' }).click();
+    await editor.fill(saved);
+    await page.getByRole('button', { name: '解析して反映' }).click();
+    await page.locator('.react-flow__node[data-id="api"] .resource-label').click();
+    await expect(
+      detail.getByRole('button', { name: 'アカウントは未確定を未解決に戻す' }),
+    ).toBeVisible();
+    await detail.getByRole('button', { name: 'アカウントは未確定を未解決に戻す' }).click();
+    await expect(page.locator('.unresolved-navigation:not(.resolved-navigation)')).toContainText(
+      '1 要素',
+    );
+    await expect(detail).toContainText('Subnet は未解決');
+  });
+  test(`未解決一覧から折りたたまれた要素を確認し設計値を補足できる (${offline ? 'HTML' : '開発画面'})`, async ({
+    page,
+    context,
+  }) => {
+    if (offline) await context.setOffline(true);
+    await page.goto(
+      offline
+        ? 'file://' + resolve('artifacts/aws.html')
+        : `http://127.0.0.1:${process.env.INFRA_TEST_PORT ?? '5188'}`,
+    );
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'unresolved.infra',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        'diagram "確認" {\n account prod "本番" {\n aws.ec2 api "API" unresolved=["アカウントは未確定"] sourceKind="plan" file="main.tf"\n }\n view service level=resource\n}',
+      ),
+    });
+    await page.getByRole('button', { name: 'すべて折りたたむ', exact: true }).click();
+    const navigation = page.locator('.unresolved-navigation');
+    await navigation.locator('summary').click();
+    await navigation.getByRole('button', { name: /API/ }).click();
+    await expect(navigation).not.toHaveAttribute('open');
+    await expect(page.locator('.react-flow__node[data-id="api"]')).toBeVisible();
+    const detail = page.getByRole('region', { name: '確認が必要な情報' });
+    await expect(detail).toContainText('アカウントは未確定');
+    await expect(page.locator('.detail-panel')).toContainText('main.tf');
+    const form = page.getByRole('form', { name: 'リソース情報の編集' });
+    await form.getByLabel('追加する属性').fill('description');
+    await form.getByRole('button', { name: '属性を追加' }).click();
+    await form.getByLabel('説明', { exact: true }).fill('確認した設計上の補足');
+    await blurEditor(page);
+    await expect(detail).toContainText('アカウントは未確定');
+    await page.getByRole('button', { name: 'DSL を編集', exact: true }).click();
+    const editor = page.getByRole('textbox', { name: 'DSL 入力' });
+    await expect(editor).toContainText('確認した設計上の補足');
+    await expect(editor).toContainText('アカウントは未確定');
+    await expect(editor).toContainText('main.tf');
+  });
   test(`自動選択された実際のアイコンの分類だけ初期展開する (${offline ? 'HTML' : '開発画面'})`, async ({
     page,
     context,
