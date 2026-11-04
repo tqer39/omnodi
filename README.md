@@ -1,10 +1,13 @@
-# Infra Canvas
+# Omnodi
 
-独自 DSL と Terraform から対話型のインフラ構成図を生成します。
+独自 DSL と Terraform から、インフラ構成図・UML・業務フロー・因果ループを対話的に表示します。
 構成モデルは React から独立した TypeScript ライブラリです。
 React Flow が探索操作を、ELK.js が境界を含む自動配置を担当します。
 
-[v0.1.1 を公開しました](https://github.com/tqer39/infra-canvas/releases/tag/v0.1.1)。主な機能・対応環境はリリースノートを参照してください。
+旧名称は Infra Canvas です。CLI・パッケージ名は `omnodi`、リポジトリは `tqer39/omnodi` に変更しました。
+Docker イメージは `ghcr.io/tqer39/omnodi` から取得できます。
+
+[v0.2.0 を公開しました](https://github.com/tqer39/omnodi/releases/tag/v0.2.0)。主な機能・対応環境はリリースノートを参照してください。
 
 本体は [MIT License](LICENSE) です。商用利用も可能です。
 同梱アイコンなどには提供元の別条件が適用されます。
@@ -15,10 +18,10 @@ React Flow が探索操作を、ELK.js が境界を含む自動配置を担当�
 
 Docker が動作する環境で実行します。clone・mise・Node.js のインストールは不要です。
 イメージは `linux/arm64`（Apple Silicon など）と `linux/amd64` に対応し、CPU に合うものが選択されます。
-[GHCR の公開イメージ](https://github.com/tqer39/infra-canvas/pkgs/container/infra-canvas)をログインなしで取得できます。
+[GHCR の公開イメージ](https://github.com/tqer39/omnodi/pkgs/container/omnodi)をログインなしで取得できます。
 
 ```bash
-docker run --rm --name infra-canvas -p 127.0.0.1:5180:5180 ghcr.io/tqer39/infra-canvas:0.1.1
+docker run --rm --name omnodi -p 127.0.0.1:5180:5180 ghcr.io/tqer39/omnodi:0.2.0
 ```
 
 ブラウザーで `http://127.0.0.1:5180/` を開くと AWS サンプルを表示します。終了は `Ctrl+C` です。
@@ -29,8 +32,8 @@ docker run --rm --name infra-canvas -p 127.0.0.1:5180:5180 ghcr.io/tqer39/infra-
 公開先は端末内だけに限定しています。コンテナー内部は `0.0.0.0` で待ち受けますが、
 ホスト側の `-p 127.0.0.1:5180:5180` を維持してください。認証付きの共有サーバー用途には対応していません。
 5180 が使用中なら `-p 127.0.0.1:5181:5180` とし、ブラウザーでは 5181 を開きます。
-上記は `:0.1.1` にバージョンを固定しています。最新の安定版を使う場合は `:latest` に置き換えてください。
-`latest` を更新する場合は、起動前に `docker pull ghcr.io/tqer39/infra-canvas:latest` を実行します。
+上記は `:0.2.0` にバージョンを固定しています。最新の安定版を使う場合は `:latest` に置き換えてください。
+`latest` を更新する場合は、起動前に `docker pull ghcr.io/tqer39/omnodi:latest` を実行します。
 
 Docker 版はブラウザーでの図の編集・保存・SVG/PNG出力・印刷と、CLI の validate・import・dsl・html・svg に対応します。
 CLI の png/pdf 用の headless Chromium は同梱しません。CLI での実行が必要な場合は開発環境を使用してください。
@@ -49,7 +52,7 @@ GitHub の公開リポジトリは取得でき、非公開リポジトリは画�
 カレントディレクトリを読み取り専用でマウントします（PowerShell では `$(pwd)` を `${PWD}` に置き換えます）。
 
 ```bash
-docker run --rm -p 127.0.0.1:5180:5180 --mount "type=bind,source=$(pwd),target=/data,readonly" ghcr.io/tqer39/infra-canvas:0.1.1 preview /data/example.infra --host 0.0.0.0 --port 5180
+docker run --rm -p 127.0.0.1:5180:5180 --mount "type=bind,source=$(pwd),target=/data,readonly" ghcr.io/tqer39/omnodi:0.2.0 preview /data/example.infra --host 0.0.0.0 --port 5180
 ```
 
 コンテナーの既定ユーザーは UID/GID 1000 です。Linux ではマウントするファイル・ディレクトリーをこのユーザーが読める必要があります。
@@ -58,16 +61,16 @@ docker run --rm -p 127.0.0.1:5180:5180 --mount "type=bind,source=$(pwd),target=/
 
 ### Docker イメージのビルド・検証・配布
 
-リポジトリ内では `mise run docker:build` で `infra-canvas:local` をビルドできます。
+リポジトリ内では `mise run docker:build` で `omnodi:local` をビルドできます。
 `mise run install` と `mise run browser:install` の後、`mise run test:docker` で
 起動・非 root 実行・API の Host/Origin 保護・図の編集・DSL 保存/読み込み・healthcheck を検証します。
 別アーキテクチャも実行できる Docker 環境では、次のように両方をローカル検証できます。
 
 ```bash
-docker buildx build --platform linux/arm64 --load -t infra-canvas:arm64 .
-mise run test:docker -- infra-canvas:arm64 linux/arm64
-docker buildx build --platform linux/amd64 --load -t infra-canvas:amd64 .
-mise run test:docker -- infra-canvas:amd64 linux/amd64
+docker buildx build --platform linux/arm64 --load -t omnodi:arm64 .
+mise run test:docker -- omnodi:arm64 linux/arm64
+docker buildx build --platform linux/amd64 --load -t omnodi:amd64 .
+mise run test:docker -- omnodi:amd64 linux/amd64
 ```
 
 [Docker ワークフロー](.github/workflows/docker.yml) は PR・main の push・手動実行で、
@@ -80,19 +83,33 @@ main CI の成功と版・日本語ノートを確認してタグを作成し、
 プレリリースは `latest` を更新しません。通常の Docker CI と手動のタグ push は配布を行いません。
 既存タグ・イメージ・Release は SHA と digest を照合して再利用し、不一致は上書きせず停止します。
 準備・再実行・権限の詳細は [リリース運用](docs/releasing.md) を参照してください。
-GHCR パッケージは Public で公開済みです。`0.1.1` と `latest` をログインなしで取得でき、同じ配布 digest を参照します。
+GHCR パッケージは Public で公開済みです。`0.2.0` と `latest` をログインなしで取得でき、同じ配布 digest を参照します。
 パイプラインは可視性やリポジトリのアクセス設定を変更しません。
+旧配布先 `ghcr.io/tqer39/infra-canvas` は v0.1.0・v0.1.1 の互換用に残していますが、今後の更新は `ghcr.io/tqer39/omnodi` を使用してください。
+改名・配布先の調査結果は [Docker 配布の移行監査](docs/docker-release-migration-audit.md) を参照してください。
+
+## CVE の公開情報を図で見る
+
+画面上部の「脆弱性情報」から「直近7日間を取得」を押すと、[NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities) の公開日時を基準に、取得時点から過去7日間の一覧を取得します。ID・製品名・説明で絞り込み、CVE を選んで「この情報の図を開く」と、説明原文と提供された製品情報を図に整理できます。一覧と図は NVD の情報の一部を整理したもので、バージョンの条件などの詳細は原資料で確認してください。対象製品やバージョンの未記載は影響がないことを意味しません。図の関連線は実環境での利用、通信、攻撃成立を示すものではありません。実際の構成や攻撃経路は原資料を確認して補足してください。
+
+攻撃経路と影響を説明する事例として、一覧内の対象 CVE またはサンプルメニューの「CVE 事例」から次の図を開けます。いずれも公開アドバイザリーを2026年10月31日に確認した説明用の図です。矢印は条件付きの経路であり、実際の配置・到達性・被害を示しません。
+
+- [CVE-2026-116170: SiYuan 履歴検索](https://github.com/siyuan-note/siyuan/security/advisories/GHSA-4hjx-84f6-gr7c)：管理者トークンを持つ利用者から履歴 DB への SQL インジェクション。対象は 3.8.6 以下、修正版は 3.8.7。
+- [CVE-2026-115188: Mautic キャンペーン取込](https://github.com/mautic/mautic/security/advisories/GHSA-mxjf-pghx-h299)：取込権限を持つ利用者によるファイル配置と、Web サーバー設定によって成立し得るコード実行。対象は 7.0.0 以上 7.2.2 未満、修正版は 7.2.2。
+- [CVE-2026-115418: AWS CDK Redshift](https://github.com/aws/aws-cdk/security/advisories/GHSA-25hh-xvj4-2cqv)：construct の値に影響できる場合に、デプロイ時の SQL が管理者権限で実行される問題。対象は `@aws-cdk/aws-redshift-alpha` 2.274.0-alpha.0 未満、修正版は同バージョン。
+
+取得には NVD へのネットワーク接続が必要です。取得した一覧は使用中のブラウザーの保存領域に残り、再取得すると置き換わります。対応する一覧 JSON は「保存済み一覧を開く」で読み込めます。 別途 `vulnerability-catalog` から書き出した `vulnerability-catalog/v1` JSON も読み込め、CVE 以外の GHSA や別名を検索できます。情報源ごとの記録は結合しません。自動更新は行いません。取得期間・取得日時は一覧に表示され、別のブラウザーや配布した単一 HTML に一覧は引き継がれません。保存できない場合や取得失敗時は画面に表示します。生成した図は「DSL を保存」で持ち出せます。未反映の DSL 下書きがある場合、図を切り替える前に下書きを反映してください。
 
 ## 開発環境での起動
 
-mise を導入し、リポジトリを clone したディレクトリで実行します。Node.js 24.21.0、Python 3.14.7、Lefthook 2.2.1 は mise が管理します。
+mise を導入し、リポジトリを clone したディレクトリで実行します。Node.js 24.22.0、Python 3.15.0、Lefthook 2.2.2 は mise が管理します。
 
 ```bash
-mise bootstrap
+mise run setup
 mise run dev
 ```
 
-セットアップは依存インストール、Git フック登録、AIルール生成、headless Chromium の準備、ビルドを行い、再実行できます。
+セットアップは Go 1.27.3 で`.standards/lock.json` に固定した採用版 dev-standards をビルドして検証用 CLI を配置し、依存インストール、Git フック登録、AIルール生成、headless Chromium の準備、ビルドを行い、再実行できます。
 Linux で Chromium の OS 依存が不足する場合は `mise run browser:install-ci` を使います。
 macOS・Linux・Windows の共通入口は mise です（動作実測は macOS）。
 
@@ -108,6 +125,12 @@ CPU は units、メモリは MiB、配列は1行に1項目で入力します。
 属性の追加・削除と、接続の種類・ポート・送信データなどの編集も可能です。
 不正な数値や存在しない参照は反映せず、現在の図を保持します。
 Terraform 由来の要素を編集すると設計値として扱い、元の Terraform には書き戻しません。
+右ペインの「確認が必要な情報」から未解決情報のある要素へ移動できます。
+対象の詳細で未解決の内容と取り込み元を確認し、必要に応じて属性を設計値として補足できます。
+属性の編集では未解決情報は自動で消えません。確認した項目は個別に解決済みにでき、未解決へ戻せます。
+解決済みの要素も右ペインの一覧から開けます。
+解決済みは確認の記録であり、クラウドや Terraform が変更・検証されたことを意味しません。
+状態は DSL に保存されますが、Terraform を新たに取り込み直した場合は引き継がれません。
 変更はブラウザー内で保持します。再読み込み前に DSL エディターの内容を保存してください。
 
 概要・サービス・ネットワーク・セキュリティを切り替えられます。
@@ -161,8 +184,8 @@ CLI は Terraform を実行せず、ローカルのファイルを読み取り�
 ## 公開 API
 
 ```typescript
-import { parseDSL, buildDisplayGraph, layoutGraph, serializeDSL } from 'infra-canvas';
-import { importTerraformRepository } from 'infra-canvas/terraform';
+import { parseDSL, buildDisplayGraph, layoutGraph, serializeDSL } from 'omnodi';
+import { importTerraformRepository } from 'omnodi/terraform';
 
 const result = parseDSL(source);
 if (result.diagram) {
@@ -179,6 +202,11 @@ npm 公開はしていません。ビルド後、ローカルのパス依存と�
 構成モデル、表示の集約、配置座標は別々の API です。
 
 ## サンプルと仕様
+
+「UML・ビジネス」サンプルには [注文クラス・コンポーネント図](examples/uml.infra)、
+[購入申請フロー](examples/business-flow.infra)、[因果ループ](examples/causal-loop.infra)があります。
+クラスの属性・操作、継承・実現・集約・合成、分岐、因果の正負・遅延を表現できます。
+記法と対応範囲は [DSL 仕様](docs/dsl.md#uml業務フロー因果ループ) を参照してください。
 
 | 入力                                                    | 内容                                                                           |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -215,13 +243,13 @@ npm 公開はしていません。ビルド後、ローカルのパス依存と�
 ## 検証
 
 コードの検査は Oxlint、整形は Oxfmt、型検査は `tsc --noEmit`、文書規約の検査は markdownlint を使います。
-`mise run fmt` で整形し、`mise run fmt:check` は書き換えず差分を検査します。
+`mise run format` で整形し、`mise run format:check` は書き換えず差分を検査します。
 独自 DSL・Terraform のサンプル、公式 SVG・資産 manifest、生成物、lockfile は整形対象から除外します。
 Markdown 内のサンプルコードも自動整形しません。
 
 Lefthook の `pre-commit` は `mise run lint` と `mise run rules:check` を並列に実行し、
 失敗するとコミットを止めます。ステージ済みファイルに限定せず、作業ツリー全体を検証します。
-自動修正や再ステージは行わないため、整形エラーは `mise run fmt` で修正してから必要な変更をステージしてください。
+自動修正や再ステージは行わないため、整形エラーは `mise run format` で修正してから必要な変更をステージしてください。
 既存の作業環境では `mise run hooks:install` でフックを登録・更新でき、
 `mise run hooks:check` で同じチェックを手動実行できます。
 単体テスト・ビルド・ブラウザテストは次のコマンドと CI で実行します。
@@ -291,13 +319,16 @@ URL・モデル名・AWSプロファイル・リージョンなどは次の `llm
 ファイルにはAPIキーを含めず、資格情報ストア内の参照IDだけを記録します。
 POSIXでは専用ディレクトリを0700、設定ファイルを0600で作成し、原子的に更新します。
 
-| OS      | 標準の設定ディレクトリ                                          |
-| ------- | --------------------------------------------------------------- |
-| macOS   | `~/Library/Application Support/Infra Canvas`                    |
-| Windows | `%LOCALAPPDATA%\\Infra Canvas`                                  |
-| Linux   | `$XDG_CONFIG_HOME/infra-canvas` または `~/.config/infra-canvas` |
+| OS      | 標準の設定ディレクトリ                              |
+| ------- | --------------------------------------------------- |
+| macOS   | `~/Library/Application Support/Omnodi`              |
+| Windows | `%LOCALAPPDATA%\\Omnodi`                            |
+| Linux   | `$XDG_CONFIG_HOME/omnodi` または `~/.config/omnodi` |
 
-`INFRA_LLM_CONFIG_DIR` で専用ディレクトリを指定できます。設定だけを別端末へコピーしてもAPIキーは移行されません。
+`OMNODI_LLM_CONFIG_DIR` で専用ディレクトリを指定できます。旧 `INFRA_LLM_CONFIG_DIR` も引き続き利用できます。
+新しい保存先がまだなく、旧 `Infra Canvas` / `infra-canvas` ディレクトリが存在する場合は、旧設定をそのまま使用します。
+OS の資格情報ストアのサービスID `infra-canvas.llm` も、保存済みAPIキーを参照するため維持しています。
+設定だけを別端末へコピーしてもAPIキーは移行されません。
 「起動時の設定に戻す」は永続設定と保存したキーを解除し、環境変数の設定へ戻します。
 既存の環境変数・`.env.llm` は自動変更しません。フォーム経由のAPIキー保存にはOSの資格情報ストアを使用します。
 外部LLMで「DSLを生成」「LLMで概要を補足」を実行すると、会話・DSL・コードの抜粋と解析根拠を接続先へ送信します。

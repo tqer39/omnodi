@@ -19,8 +19,17 @@ const reserved = new Set([
   'line',
   'provenance',
   'unresolved',
+  'resolved',
 ]);
 const names: Record<string, string> = {
+  shape: '図形',
+  stereotype: 'ステレオタイプ',
+  fields: 'UML 属性',
+  operations: 'UML 操作',
+  polarity: '因果の正負',
+  delay: '因果の遅延',
+  sourceMultiplicity: '送信元の多重度',
+  targetMultiplicity: '接続先の多重度',
   config: 'サービス設定',
   configFormat: '設定形式',
   replicas: 'レプリカ数',
@@ -45,6 +54,8 @@ const names: Record<string, string> = {
   description: '説明',
 };
 const enums: Record<string, string[]> = {
+  shape: ['rectangle', 'rounded', 'ellipse', 'diamond'],
+  polarity: ['positive', 'negative'],
   configFormat: ['nginx', 'yaml', 'json', 'text'],
   launchType: ['FARGATE', 'EC2', 'EXTERNAL'],
   display: ['table', 'list'],
@@ -159,7 +170,17 @@ export function PropertyEditor({
     ? [...textAttributes, ...arrayAttributes, ...numberAttributes, ...boolAttributes].filter(
         (key) => !reserved.has(key) && key !== 'icon',
       )
-    : ['label', 'protocol', 'port', 'description', 'signals'];
+    : [
+        'label',
+        'protocol',
+        'port',
+        'description',
+        'signals',
+        'polarity',
+        'delay',
+        'sourceMultiplicity',
+        'targetMultiplicity',
+      ];
   const change = (key: string, value: string) => {
     setFields((current) =>
       current.map((field) => (field.key === key ? { ...field, value } : field)),
@@ -408,7 +429,7 @@ export function PropertyEditor({
           }
           const type = numberAttributes.has(key)
             ? 'number'
-            : boolAttributes.has(key)
+            : boolAttributes.has(key) || key === 'delay'
               ? 'boolean'
               : arrayAttributes.has(key) || key === 'signals'
                 ? 'array'

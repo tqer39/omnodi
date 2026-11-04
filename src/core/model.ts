@@ -28,6 +28,7 @@ export interface Resource {
   location?: SourceLocation;
   provenance?: Provenance;
   unresolved?: string[];
+  resolved?: string[];
 }
 export const edgeKinds = [
   'traffic',
@@ -37,6 +38,12 @@ export const edgeKinds = [
   'association',
   'replication',
   'failover',
+  'flow',
+  'cause',
+  'inheritance',
+  'realization',
+  'aggregation',
+  'composition',
 ] as const;
 export type EdgeKind = (typeof edgeKinds)[number];
 export const edgeKindLabels: Record<EdgeKind, string> = {
@@ -47,6 +54,12 @@ export const edgeKindLabels: Record<EdgeKind, string> = {
   association: '関連',
   replication: '複製',
   failover: '切替',
+  flow: '業務フロー',
+  cause: '因果関係',
+  inheritance: '継承',
+  realization: '実現',
+  aggregation: '集約',
+  composition: '合成',
 };
 export const telemetrySignals = ['metrics', 'logs', 'traces'] as const;
 export const telemetrySignalLabels: Record<string, string> = {
@@ -153,6 +166,9 @@ export const boundaryTypes = new Set([
   'network',
   'subnet',
   'group',
+  'uml.package',
+  'uml.component',
+  'business.lane',
   'collection',
   'site',
   'rack',

@@ -1,0 +1,15 @@
+diagram "因果ループ・成長とサポート負荷" version=1 {
+  causal.variable users "利用者数"
+  causal.variable referrals "口コミ・紹介"
+  causal.variable tickets "問い合わせ件数"
+  causal.variable waiting "サポート待ち時間"
+  causal.variable satisfaction "顧客満足度"
+  users -> referrals kind=cause polarity=positive label="R1 紹介の増加"
+  referrals -> users kind=cause polarity=positive delay=true label="R1 利用者の増加"
+  users -> tickets kind=cause polarity=positive
+  tickets -> waiting kind=cause polarity=positive
+  waiting -> satisfaction kind=cause polarity=negative delay=true
+  satisfaction -> users kind=cause polarity=positive label="B1 継続利用"
+  note assumptions "因果関係の仮説" description="正負は原因が増えたときの結果の変化方向。R1は強化、B1は抑制のループ。相関だけで因果を断定せず、データや実験で検証する。" anchor=users
+  view service level=resource direction=RIGHT
+}

@@ -1,3 +1,4 @@
+import { nodeShape, connectionMarker, markerPath } from './notation.js';
 import { absolutePlacements, bridgePath } from './geometry.js';
 import { buildDisplayGraph } from './display.js';
 import { layoutGraph, connectionLabel } from './layout.js';
@@ -12,6 +13,7 @@ import {
 } from './presentation.js';
 import {
   isBoundary,
+  type EdgeKind,
   type Diagram,
   type DisplayGraph,
   type LayoutResult,
@@ -28,6 +30,12 @@ export const connectionColors: Record<string, string> = {
   association: '#258d81',
   replication: '#287ca0',
   failover: '#bb5d43',
+  flow: '#236b87',
+  cause: '#8b4a28',
+  inheritance: '#596579',
+  realization: '#596579',
+  aggregation: '#596579',
+  composition: '#596579',
 };
 export const connectionKinds: Record<string, string> = {
   traffic: '通信',
@@ -37,6 +45,12 @@ export const connectionKinds: Record<string, string> = {
   association: '関連',
   replication: '複製',
   failover: '切替',
+  flow: '業務フロー',
+  cause: '因果関係',
+  inheritance: '継承',
+  realization: '実現',
+  aggregation: '集約',
+  composition: '合成',
 };
 export interface StaticOptions extends DisplayOptions {
   icons?: Record<string, string>;
@@ -120,9 +134,15 @@ export function renderSVG(
     860,
     Math.max(0, ...boxes.map((box) => box.x + box.width), ...points.map((p) => p.x)) - minX + 32,
   );
+  const legendColumns = Math.max(1, Math.floor((width - 48) / 114));
+  const legendRows = Math.ceil(Object.keys(connectionKinds).length / legendColumns);
+  const legendExtraHeight = (legendRows - 1) * 24;
   const height = Math.max(
     300,
-    Math.max(0, ...boxes.map((box) => box.y + box.height), ...points.map((p) => p.y)) - top + 130,
+    Math.max(0, ...boxes.map((box) => box.y + box.height), ...points.map((p) => p.y)) -
+      top +
+      130 +
+      legendExtraHeight,
   );
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${minX} ${top} ${width} ${height}" role="img" aria-label="${escape(title)}"><title>${escape(title)}</title><defs>${Object.entries(
@@ -138,13 +158,27 @@ export function renderSVG(
     block(minX + 24, top + 30, title, width - 48, 20),
   ];
   const card = (resource: Resource): string => {
-    const box = rectangles.get(resource.id)!;
+    const box = { ...rectangles.get(resource.id)! };
     const boundary = isBoundary(resource) && !graph.collapsed.includes(resource.id);
     const appearance = resourceAppearance(resource);
     const fill = appearance.background ?? (boundary ? '#f1f6f8' : '#fff');
     const border = appearance.borderColor ?? '#afc6d2';
     const shape = String(resource.attributes.appearance ?? 'default');
-    let result = `<g data-resource-id="${escape(resource.id)}" opacity="${appearance.opacity ?? 1}"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="${shape === 'storage' ? 0 : shape === 'database' ? 18 : 10}" fill="${fill}" stroke="${border}" ${appearance.borderStyle === 'dashed' ? 'stroke-dasharray="6 4"' : ''}/>`;
+    const notationShape = nodeShape(resource);
+    const outline =
+      notationShape === 'diamond'
+        ? `<polygon points="${box.x},${box.y + box.height / 2} ${box.x + box.width / 2},${box.y} ${box.x + box.width},${box.y + box.height / 2} ${box.x + box.width / 2},${box.y + box.height}"`
+        : notationShape === 'ellipse'
+          ? `<ellipse cx="${box.x + box.width / 2}" cy="${box.y + box.height / 2}" rx="${box.width / 2}" ry="${box.height / 2}"`
+          : `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="${notationShape === 'rounded' ? 24 : shape === 'storage' ? 0 : shape === 'database' ? 18 : 10}"`;
+    let result = `<g data-resource-id="${escape(resource.id)}" opacity="${appearance.opacity ?? 1}">${outline} fill="${fill}" stroke="${border}" ${appearance.borderStyle === 'dashed' ? 'stroke-dasharray="6 4"' : ''}/>`;
+    // 外形の中央半分を本文領域として使う（対話画面と同じ）。
+    if (['diamond', 'ellipse'].includes(notationShape) && !isBoundary(resource)) {
+      box.x += box.width / 4;
+      box.y += box.height / 4;
+      box.width /= 2;
+      box.height /= 2;
+    }
     if (shape === 'database')
       result += `<ellipse cx="${box.x + box.width / 2}" cy="${box.y + 12}" rx="${box.width / 2}" ry="12" fill="none" stroke="${border}"/>`;
     if (shape === 'queue' || shape === 'rack')
@@ -160,7 +194,14 @@ export function renderSVG(
         throw new Error('静的出力のアイコンには同梱画像のdata URLを指定してください。');
       result += `<image href="${escape(icon)}" x="${box.x + 12}" y="${box.y + 14}" width="24" height="24"/>`;
     }
-    result += text(box.x + 44, box.y + 16, resourceTypeLabel(resource), 10);
+    result += text(
+      box.x + 44,
+      box.y + 16,
+      resource.attributes.stereotype
+        ? `«${resource.attributes.stereotype}»`
+        : resourceTypeLabel(resource),
+      10,
+    );
     const lines = wrap(resource.label, box.width - 64, 14);
     result += lines
       .map((line, index) =>
@@ -222,14 +263,14 @@ export function renderSVG(
           : connection.attributes.change === 'remove'
             ? '#ad4848'
             : connectionColors[connection.kind]!;
+    const marker = connectionMarker(connection);
+    const atStart = marker === 'diamond' || marker === 'filled-diamond';
     parts.push(
-      `<defs><marker id="arrow-edge-${index}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="${color}"/></marker></defs>`,
-    );
-    parts.push(
+      `<defs><marker id="arrow-edge-${index}" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto-start-reverse"><path d="${markerPath(marker)}" fill="${marker === 'triangle' || marker === 'diamond' ? '#fff' : color}" stroke="${color}"/></marker></defs>`,
       `<path data-edge-id="${escape(edge.id)}" d="${bridgePath(
         edge.points,
         (layout.edges ?? []).slice(0, index).map((other) => other.points),
-      )}" fill="none" stroke="${color}" stroke-width="1.7" marker-end="url(#arrow-edge-${index})" ${['dependency', 'association', 'failover'].includes(connection.kind) || connection.attributes.change === 'remove' ? 'stroke-dasharray="6 4"' : ''}/>`,
+      )}" fill="none" stroke="${color}" stroke-width="1.7" marker-${atStart ? 'start' : 'end'}="url(#arrow-edge-${index})" ${['dependency', 'association', 'failover', 'realization'].includes(connection.kind) || connection.attributes.change === 'remove' ? 'stroke-dasharray="6 4"' : ''}/>`,
     );
   }
   for (const resource of graph.resources.filter(
@@ -278,25 +319,31 @@ export function renderSVG(
       block(note.x + 16, note.y + 50, note.text, note.width - 32),
     );
   }
-  const legendY = top + height - 88;
+  const legendY = top + height - 88 - legendExtraHeight;
   parts.push(text(minX + 24, legendY - 4, '凡例', 13));
   Object.entries(connectionKinds).forEach(([kind, label], index) => {
-    const x = minX + 24 + index * 114;
+    const x = minX + 24 + (index % legendColumns) * 114;
+    const y = legendY + Math.floor(index / legendColumns) * 24;
+    const marker = connectionMarker({ kind: kind as EdgeKind });
+    const atStart = marker === 'diamond' || marker === 'filled-diamond';
+    const color = connectionColors[kind]!;
     parts.push(
-      `<path d="M${x} ${legendY + 15} h24" stroke="${connectionColors[kind]}"/>`,
-      text(x + 30, legendY + 19, label),
+      `<g data-legend-kind="${kind}"><path d="M${x} ${y + 15} h24" stroke="${color}" ${['dependency', 'association', 'failover', 'realization'].includes(kind) ? 'stroke-dasharray="6 4"' : ''}/>` +
+        `<path d="${markerPath(marker)}" transform="translate(${x + (atStart ? 0 : 14)} ${y + 9})" fill="${marker === 'triangle' || marker === 'diamond' ? '#fff' : color}" stroke="${color}"/>` +
+        text(x + 30, y + 19, label) +
+        '</g>',
     );
   });
   parts.push(
     text(
       minX + 24,
-      legendY + 44,
+      legendY + legendExtraHeight + 44,
       `公開範囲: ${Object.values(exposureLabels).join(' / ')}　根拠: ${Object.values(evidenceLabels).join(' / ')}`,
       11,
     ),
     text(
       minX + 24,
-      legendY + 64,
+      legendY + legendExtraHeight + 64,
       `変更: ${Object.values(changeLabels).join(' / ')}　※明示された設計・観測情報を表示`,
       11,
     ),
@@ -360,7 +407,7 @@ export function printDocument(svg: string, options: PrintOptions = {}): string {
     const vy = pages === 'fit' ? y : y! + (Math.floor(index / columns) * height) / scale;
     const vw = pages === 'fit' ? sw : width / scale,
       vh = pages === 'fit' ? sh : height / scale;
-    return `<section class="sheet"><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}" preserveAspectRatio="xMidYMid meet">${inner}</svg><footer>Infra Canvas · ${index + 1}/${columns * rows} · ${escape(paper)} ${escape(orientation)}${pages === 'tile' ? ` · ${scale * 100}%` : ' · 全体を用紙に合わせる'}</footer></section>`;
+    return `<section class="sheet"><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}" preserveAspectRatio="xMidYMid meet">${inner}</svg><footer>Omnodi · ${index + 1}/${columns * rows} · ${escape(paper)} ${escape(orientation)}${pages === 'tile' ? ` · ${scale * 100}%` : ' · 全体を用紙に合わせる'}</footer></section>`;
   });
-  return `<!doctype html><html lang="ja"><meta charset="utf-8"><title>Infra Canvas 印刷</title><style>@page{size:${paper} ${orientation};margin:10mm}body{margin:0;font-family:system-ui,sans-serif}.sheet{width:${w - 20}mm;break-after:page;overflow:hidden}.sheet:last-child{break-after:auto}.sheet svg{display:block;max-width:100%;height:${h - 30}mm}footer{font-size:10px;height:8mm;text-align:center;color:#5d7180}@media screen{body{background:#edf3f6}.sheet{background:white;margin:12px auto;padding:10mm}}</style><body>${sheets.join('')}</body></html>`;
+  return `<!doctype html><html lang="ja"><meta charset="utf-8"><title>Omnodi 印刷</title><style>@page{size:${paper} ${orientation};margin:10mm}body{margin:0;font-family:system-ui,sans-serif}.sheet{width:${w - 20}mm;break-after:page;overflow:hidden}.sheet:last-child{break-after:auto}.sheet svg{display:block;max-width:100%;height:${h - 30}mm}footer{font-size:10px;height:8mm;text-align:center;color:#5d7180}@media screen{body{background:#edf3f6}.sheet{background:white;margin:12px auto;padding:10mm}}</style><body>${sheets.join('')}</body></html>`;
 }

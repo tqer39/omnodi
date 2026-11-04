@@ -1,7 +1,10 @@
+import { nodeShape, connectionMarker, markerPath } from '../core/notation';
+import { ActionLabel } from './ActionLabel';
 import { sampleGroups } from './samples';
 import { resourceTypeLabel, resourceAppearance } from '../core/presentation';
 import { renderSVG, printDocument, type PrintOptions } from '../core/static-svg';
 import { ChatPanel } from './ChatPanel';
+import { CvePanel } from './CvePanel';
 import { Magnifier } from './Magnifier';
 import {
   absolutePlacements,
@@ -17,6 +20,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useId,
   useState,
   useReducer,
   type CSSProperties,
@@ -31,7 +35,6 @@ import {
   Handle,
   ViewportPortal,
   Position,
-  MarkerType,
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
@@ -69,11 +72,13 @@ import { getRegionCountry, getResourceRegion } from '../assets/regions';
 import { createHistory, historyReducer } from './history';
 import defaultSource from '../../examples/aws.infra?raw';
 import { PropertyEditor } from './property-editor';
+import { addSuggestedResource, suggestResources } from '../core/suggestions';
 import { edgeKindLabels as kindLabels, type Attributes, type Connection } from '../core/model';
 import { connectionStyles, connectionDescriptions } from './connection-style';
 
 declare global {
   interface Window {
+    __OMNODI__?: Diagram;
     __INFRA_CANVAS__?: Diagram;
   }
 }
@@ -103,6 +108,8 @@ const viewLabels: Record<string, string> = {
 };
 
 function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
+  const marker = connectionMarker({ kind });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
   return (
     <svg
       width="42"
@@ -118,7 +125,12 @@ function ConnectionSample({ kind }: { kind: Connection['kind'] }) {
         strokeDasharray={connectionStyles[kind].dash}
         fill="none"
       />
-      <path d="M 36 3 L 41 6 L 36 9 Z" fill="currentColor" />
+      <path
+        d={markerPath(marker)}
+        transform={atStart ? 'translate(11 0) rotate(180 6 6)' : 'translate(30 0)'}
+        fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : 'currentColor'}
+        stroke="currentColor"
+      />
     </svg>
   );
 }
@@ -281,9 +293,21 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
   const homepage = getIconHomepage(resource.type);
   const content = resourceContent(resource);
   const metadata = resourceMetadata(resource);
+  const appearance = resourceAppearance(resource);
+  const shaped = !boundary && ['diamond', 'ellipse'].includes(nodeShape(resource));
+  const cardStyle: CSSProperties = shaped
+    ? ({
+        ...appearance,
+        background: 'transparent',
+        '--notation-fill': appearance.background ?? '#fff',
+        '--notation-stroke': appearance.borderColor ?? '#afc6d2',
+        '--notation-dash': appearance.borderStyle === 'dashed' ? '6 4' : 'none',
+      } as CSSProperties)
+    : appearance;
   return (
     <div
-      style={resourceAppearance(resource)}
+      style={cardStyle}
+      data-shape={boundary ? 'rectangle' : nodeShape(resource)}
       data-evidence={String(resource.attributes.evidence ?? '')}
       data-change={String(resource.attributes.change ?? '')}
       data-exposure={String(
@@ -295,6 +319,22 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
       data-appearance={String(resource.attributes.appearance ?? 'default')}
       className={`resource-card ${data.compact ? 'compact-card' : ''} ${boundary && !collapsed ? 'boundary-card' : ''} ${boundary && resource.type.startsWith('aws.') ? 'detail-boundary-card' : ''} ${collapsed ? 'collapsed-card' : ''} ${related ? 'related' : ''} ${muted ? 'muted' : ''}`}
     >
+      {shaped && (
+        <svg
+          className="notation-outline"
+          width="100%"
+          height="100%"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {nodeShape(resource) === 'diamond' ? (
+            <polygon points="0,50 50,0 100,50 50,100" />
+          ) : (
+            <ellipse cx="50" cy="50" rx="49.5" ry="49.5" />
+          )}
+        </svg>
+      )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
       {Array.isArray(resource.attributes.ports) &&
@@ -340,7 +380,11 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
           </span>
         )}
         <div className="resource-text">
-          <span className="resource-type">{resourceTypeLabel(resource)}</span>
+          <span className="resource-type">
+            {resource.attributes.stereotype
+              ? `«${resource.attributes.stereotype}»`
+              : resourceTypeLabel(resource)}
+          </span>
           <span className="resource-label">
             <RegionFlag resource={resource} />
             {homepage ? (
@@ -458,14 +502,34 @@ function RoutedConnection(props: EdgeProps) {
       ? curveAnchor
       : undefined
     : route?.labelAnchor;
+  const markerId = `notation-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const marker = connectionMarker({ kind: props.data?.kind as Connection['kind'] });
+  const atStart = marker === 'diamond' || marker === 'filled-diamond';
+  const color = String(props.style?.stroke ?? '#596579');
   const select = props.data?.onSelect as ((id: string) => void) | undefined;
   return (
     <>
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="12"
+          markerHeight="12"
+          refX="11"
+          refY="6"
+          orient="auto-start-reverse"
+        >
+          <path
+            d={markerPath(marker)}
+            fill={marker === 'triangle' || marker === 'diamond' ? '#fff' : color}
+            stroke={color}
+          />
+        </marker>
+      </defs>
       <BaseEdge
         id={props.id}
         path={path}
-        markerEnd={props.markerEnd}
-        markerStart={props.markerStart}
+        markerEnd={atStart ? undefined : `url(#${markerId})`}
+        markerStart={atStart ? `url(#${markerId})` : undefined}
         style={props.style}
       />
       {labelAnchor && (
@@ -505,8 +569,27 @@ function RoutedConnection(props: EdgeProps) {
 }
 const edgeTypes = { routed: RoutedConnection };
 
+/** 図・DSL・表示履歴を同期し、選択対象の編集と候補からの連続追加を提供する。 */
 function App() {
-  const initial = useMemo(() => window.__INFRA_CANVAS__ ?? parseDSL(defaultSource).diagram, []);
+  const [showActionLabels, setShowActionLabels] = useState(() => {
+    try {
+      return localStorage.getItem('omnodi.showActionLabels') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const changeActionLabels = (show: boolean) => {
+    setShowActionLabels(show);
+    try {
+      localStorage.setItem('omnodi.showActionLabels', String(show));
+    } catch {
+      /* 保存できない環境でも現在の画面には反映する。 */
+    }
+  };
+  const initial = useMemo(
+    () => window.__OMNODI__ ?? window.__INFRA_CANVAS__ ?? parseDSL(defaultSource).diagram,
+    [],
+  );
   const [history, dispatchHistory] = useReducer(
     historyReducer,
     {
@@ -538,6 +621,7 @@ function App() {
   const [source, setSource] = useState(() => (initial ? serializeDSL(initial) : defaultSource));
   const [editorOpen, setEditorOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [cveOpen, setCveOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
   const [lastLayout, setLastLayout] = useState<LayoutResult>();
   const [exportOpen, setExportOpen] = useState(false);
@@ -954,17 +1038,6 @@ function App() {
               ? `target:${edge.attributes.targetPort}`
               : undefined,
             label: connectionLabel(edge),
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color:
-                edge.attributes.change === 'add'
-                  ? '#258454'
-                  : edge.attributes.change === 'remove'
-                    ? '#ad4848'
-                    : edge.attributes.change === 'modify'
-                      ? '#b27616'
-                      : connectionStyles[edge.kind].color,
-            },
             style: {
               stroke:
                 edge.attributes.change === 'add'
@@ -1178,6 +1251,67 @@ function App() {
     ],
   );
   const selectedResource = diagram?.resources.find((resource) => resource.id === selected);
+  const resourceSuggestions = useMemo(
+    () => (diagram && selected ? suggestResources(diagram, selected) : []),
+    [diagram, selected],
+  );
+  const suggestionBlocked = useMemo(
+    () => Boolean(diagram && source !== serializeDSL(diagram)),
+    [diagram, source],
+  );
+  /** 未反映の DSL を保護し、候補の追加と配置先の表示・選択を一つの履歴に反映する。 */
+  const addSuggestion = (type: string) => {
+    if (!diagram || !selected || suggestionBlocked) return;
+    try {
+      const next = addSuggestedResource(diagram, selected, type);
+      const nextSource = serializeDSL(next);
+      const parsed = parseDSL(nextSource);
+      if (!parsed.diagram)
+        throw new Error(parsed.diagnostics.map((item) => item.message).join('\n'));
+      next.resources = next.resources.map((item) => ({
+        ...item,
+        location: parsed.diagram!.resources.find((resource) => resource.id === item.id)?.location,
+      }));
+      next.connections = next.connections.map((item) => ({
+        ...item,
+        location: parsed.diagram!.connections.find((edge) => edge.id === item.id)?.location,
+      }));
+      const added = next.resources.at(-1)!;
+      const ancestors = new Set<string>();
+      let parentId = added.parentId;
+      while (parentId && !ancestors.has(parentId)) {
+        ancestors.add(parentId);
+        parentId = next.resources.find((item) => item.id === parentId)?.parentId;
+      }
+      const nextScope = scope && ancestors.has(scope) ? scope : undefined;
+      autoFitContext.current = { diagram: next, view, scope: nextScope };
+      dispatchHistory({
+        type: 'commit',
+        update: (current) => ({
+          ...current,
+          diagram: next,
+          source: nextSource,
+          scope: nextScope,
+          collapsed: current.collapsed.filter((id) => !ancestors.has(id)),
+          expanded: [...new Set([...current.expanded, ...ancestors])],
+          ...(type === 'sg' ? { showSG: true } : {}),
+        }),
+      });
+      setSource(nextSource);
+      setDiagnostics([]);
+      setSelected(added.id);
+      setSelectedEdge(undefined);
+      setHovered(undefined);
+    } catch (error) {
+      setDiagnostics([error instanceof Error ? error.message : String(error)]);
+    }
+  };
+  const unresolvedResources = (diagram?.resources ?? []).filter(
+    (resource) => resource.unresolved?.length,
+  );
+  const resolvedResources = (diagram?.resources ?? []).filter(
+    (resource) => resource.resolved?.length,
+  );
   const selectedRelations = [
     ...(diagram?.connections ?? []),
     ...(graph?.connections.filter(
@@ -1280,6 +1414,51 @@ function App() {
     const result = parseDSL(source);
     setDiagnostics(result.diagnostics.map((item) => `${item.line}:${item.column} ${item.message}`));
     if (result.diagram) acceptDiagram(result.diagram);
+  };
+  const setResolution = (id: string, index: number, resolve: boolean) => {
+    if (!diagram) return;
+    if (source !== serializeDSL(diagram)) {
+      setDiagnostics(['DSL エディターに未反映の変更があります。先に解析して反映してください。']);
+      return;
+    }
+    const next: Diagram = {
+      ...diagram,
+      resources: diagram.resources.map((item) => {
+        if (item.id !== id) return item;
+        const unresolved = [...(item.unresolved ?? [])];
+        const resolved = [...(item.resolved ?? [])];
+        const from = resolve ? unresolved : resolved;
+        const to = resolve ? resolved : unresolved;
+        if (index < 0 || index >= from.length) return item;
+        to.push(from.splice(index, 1)[0]!);
+        const attributes = { ...item.attributes };
+        delete attributes.unresolved;
+        delete attributes.resolved;
+        return { ...item, attributes, unresolved, resolved };
+      }),
+    };
+    validateDiagram(next);
+    const nextSource = serializeDSL(next);
+    const parsed = parseDSL(nextSource);
+    if (!parsed.diagram) {
+      setDiagnostics(parsed.diagnostics.map((item) => item.message));
+      return;
+    }
+    next.resources = next.resources.map((item) => ({
+      ...item,
+      location: parsed.diagram!.resources.find((resource) => resource.id === item.id)?.location,
+    }));
+    next.connections = next.connections.map((item, index) => ({
+      ...item,
+      location: parsed.diagram!.connections[index]?.location,
+    }));
+    autoFitContext.current = { diagram: next, view, scope };
+    dispatchHistory({
+      type: 'commit',
+      update: (current) => ({ ...current, diagram: next, source: nextSource }),
+    });
+    setSource(nextSource);
+    setDiagnostics([]);
   };
   const editItem = (
     id: string,
@@ -1507,14 +1686,14 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [restoreHistory]);
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-action-labels={showActionLabels}>
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true">
           ▧
         </div>
         <div className="brand">
-          <strong>Infra Canvas</strong>
-          <span>インフラを、見渡す。</span>
+          <strong>Omnodi</strong>
+          <span>構造と流れを、見渡す。</span>
         </div>
         <div className="document-title">{diagram?.title ?? '構成図'}</div>
         <div className="history-actions" role="group" aria-label="操作履歴">
@@ -1524,7 +1703,7 @@ function App() {
             onClick={() => restoreHistory('undo')}
             title="元に戻す（Ctrl / ⌘ + Z）"
           >
-            元に戻す
+            <ActionLabel icon="undo">元に戻す</ActionLabel>
           </button>
           <button
             className="toolbar-button"
@@ -1532,12 +1711,16 @@ function App() {
             onClick={() => restoreHistory('redo')}
             title="やり直す（Ctrl / ⌘ + Shift + Z、Ctrl + Y）"
           >
-            やり直す
+            <ActionLabel icon="redo">やり直す</ActionLabel>
           </button>
         </div>
         <div className="header-actions" role="group" aria-label="ファイル">
-          <button className="toolbar-button" onClick={() => upload.current?.click()}>
-            ファイルを開く
+          <button
+            title="ファイルを開く"
+            className="toolbar-button"
+            onClick={() => upload.current?.click()}
+          >
+            <ActionLabel icon="open">ファイルを開く</ActionLabel>
           </button>
           <select
             className="sample-picker"
@@ -1564,13 +1747,15 @@ function App() {
             ))}
           </select>
           <button
+            title="ダウンロード・印刷"
             className="toolbar-button"
             aria-expanded={exportOpen}
             onClick={() => setExportOpen(!exportOpen)}
           >
-            ダウンロード・印刷
+            <ActionLabel icon="download">ダウンロード・印刷</ActionLabel>
           </button>
           <button
+            title="DSL を保存"
             className="toolbar-button"
             onClick={() => {
               if (!diagram) return;
@@ -1585,22 +1770,32 @@ function App() {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}
           >
-            DSL を保存
+            <ActionLabel icon="save">DSL を保存</ActionLabel>
           </button>
         </div>
         <div className="header-actions" role="group" aria-label="編集・相談">
           <button
+            title="脆弱性情報"
+            className={`toolbar-button ${cveOpen ? 'active' : ''}`}
+            aria-expanded={cveOpen}
+            onClick={() => setCveOpen(!cveOpen)}
+          >
+            <ActionLabel icon="shield">脆弱性情報</ActionLabel>
+          </button>
+          <button
+            title="DSL を編集"
             className={`toolbar-button ${editorOpen ? 'active' : ''}`}
             onClick={() => setEditorOpen(!editorOpen)}
           >
-            DSL を編集
+            <ActionLabel icon="code">DSL を編集</ActionLabel>
           </button>
           <button
+            title="チャット"
             className={`toolbar-button ${chatOpen ? 'active' : ''}`}
             aria-expanded={chatOpen}
             onClick={() => setChatOpen(!chatOpen)}
           >
-            チャット
+            <ActionLabel icon="chat">チャット</ActionLabel>
           </button>
         </div>
         <input
@@ -1676,6 +1871,21 @@ function App() {
         </section>
       )}
       <section className="workspace">
+        {cveOpen && (
+          <CvePanel
+            onClose={() => setCveOpen(false)}
+            onApply={(next) => {
+              if (diagram && source !== serializeDSL(diagram)) {
+                setDiagnostics([
+                  'DSL エディターに未反映の変更があります。先に解析して反映してください。',
+                ]);
+                return false;
+              }
+              acceptDiagram(next);
+              return true;
+            }}
+          />
+        )}
         <ChatPanel
           open={chatOpen}
           source={source}
@@ -1721,7 +1931,7 @@ function App() {
                   }
                 }}
               >
-                ルーペ {magnifierActive ? 'ON' : 'OFF'}
+                <ActionLabel icon="magnify">ルーペ {magnifierActive ? 'ON' : 'OFF'}</ActionLabel>
               </button>
               <label className="detail-picker">
                 構成の詳しさ
@@ -1744,14 +1954,28 @@ function App() {
                   ))}
                 </select>
               </label>
+              <label className="detail-picker arrow-shape-picker">
+                <ActionLabel icon="shape">矢印の形</ActionLabel>
+                <select
+                  title="矢印の形"
+                  aria-label="矢印の形"
+                  value={edgeShape}
+                  onChange={(event) => setEdgeShape(event.target.value as 'orthogonal' | 'bezier')}
+                >
+                  <option value="orthogonal">直角</option>
+                  <option value="bezier">曲線</option>
+                </select>
+              </label>
               <div className="display-options-anchor" ref={displayOptionsAnchor}>
                 <button
                   className="toolbar-button"
                   aria-expanded={filtersOpen}
+                  title="表示オプション"
                   aria-controls="display-options"
                   onClick={() => setFiltersOpen(!filtersOpen)}
                 >
-                  表示オプション <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
+                  <ActionLabel icon="settings">表示オプション</ActionLabel>
+                  <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
                 </button>
                 <section
                   hidden={!filtersOpen}
@@ -1798,17 +2022,12 @@ function App() {
                     <p className="display-hint">SGの所属は、通信の成立を示しません。</p>
                   </fieldset>
                   <label className="display-setting-row">
-                    矢印の形
-                    <select
-                      aria-label="矢印の形"
-                      value={edgeShape}
-                      onChange={(event) =>
-                        setEdgeShape(event.target.value as 'orthogonal' | 'bezier')
-                      }
-                    >
-                      <option value="orthogonal">直角</option>
-                      <option value="bezier">曲線</option>
-                    </select>
+                    <input
+                      type="checkbox"
+                      checked={showActionLabels}
+                      onChange={(event) => changeActionLabels(event.target.checked)}
+                    />
+                    機能名を表示
                   </label>
 
                   <fieldset>
@@ -2025,7 +2244,7 @@ function App() {
                 onClick={clearSelection}
                 title="全体をカラー表示に戻す（パン・ズームは維持）"
               >
-                選択を解除
+                <ActionLabel icon="clear">選択を解除</ActionLabel>
               </button>
               <div className="search-box">
                 <span aria-hidden="true">⌕</span>
@@ -2069,7 +2288,7 @@ function App() {
                 onClick={() => setAllBoundaries(true)}
                 title="現在の表示範囲の境界をすべて折りたたむ"
               >
-                すべて折りたたむ
+                <ActionLabel icon="collapse">すべて折りたたむ</ActionLabel>
               </button>
               <button
                 className="toolbar-button"
@@ -2081,7 +2300,7 @@ function App() {
                 onClick={() => setAllBoundaries(false)}
                 title="現在の表示範囲の境界をすべて展開する"
               >
-                すべて展開する
+                <ActionLabel icon="expand">すべて展開する</ActionLabel>
               </button>
             </div>
             <div className="toolbar-group" role="group" aria-label="配置">
@@ -2091,13 +2310,18 @@ function App() {
                 aria-pressed={editLayout}
                 disabled={Boolean(scope)}
                 title={
-                  scope ? '配置は全体表示で編集できます' : 'ノードを移動し、DSLへ位置を保存します'
+                  scope
+                    ? '配置は全体表示で編集できます'
+                    : editLayout
+                      ? '移動を完了してレイアウト編集を終了します'
+                      : 'ノードを移動し、DSLへ位置を保存します'
                 }
                 onClick={() => setEditLayout(!editLayout)}
               >
-                {editLayout ? '移動を完了' : '配置を移動'}
+                <ActionLabel icon="move">{editLayout ? '移動を完了' : '配置を移動'}</ActionLabel>
               </button>
               <button
+                title="固定を解除"
                 className="toolbar-button"
                 disabled={!diagram?.resources.some((resource) => resource.attributes.fixed)}
                 onClick={() => {
@@ -2117,7 +2341,7 @@ function App() {
                   setDiagram(next);
                 }}
               >
-                固定を解除
+                <ActionLabel icon="unlock">固定を解除</ActionLabel>
               </button>
             </div>
             <div className="canvas-footer" role="group" aria-label="構成情報">
@@ -2297,6 +2521,50 @@ function App() {
           )}
         </div>
         <aside className="detail-panel">
+          {unresolvedResources.length > 0 && (
+            <details className="unresolved-navigation">
+              <summary>確認が必要な情報 ({unresolvedResources.length} 要素)</summary>
+              <p>取り込みや設計で未解決の情報がある要素を表示します。</p>
+              {unresolvedResources.map((resource) => (
+                <button
+                  type="button"
+                  key={resource.id}
+                  onClick={(event) => {
+                    const list = event.currentTarget.closest('details');
+                    if (list) list.open = false;
+                    focusResource(resource.id);
+                  }}
+                >
+                  <strong>{resource.label}</strong>
+                  <span>
+                    {resource.type} · {resource.id} · {resource.unresolved!.length} 件
+                  </span>
+                </button>
+              ))}
+            </details>
+          )}
+          {resolvedResources.length > 0 && (
+            <details className="unresolved-navigation resolved-navigation">
+              <summary>解決済みの情報 ({resolvedResources.length} 要素)</summary>
+              <p>確認済みの記録を表示し、未解決に戻せます。</p>
+              {resolvedResources.map((resource) => (
+                <button
+                  type="button"
+                  key={resource.id}
+                  onClick={(event) => {
+                    const list = event.currentTarget.closest('details');
+                    if (list) list.open = false;
+                    focusResource(resource.id);
+                  }}
+                >
+                  <strong>{resource.label}</strong>
+                  <span>
+                    {resource.type} · {resource.id} · {resource.resolved!.length} 件
+                  </span>
+                </button>
+              ))}
+            </details>
+          )}
           {graph?.resources.some((resource) => graph.collapsed.includes(resource.id)) && (
             <section className="collapsed-navigation" aria-label="折りたたみ中の境界">
               <h2>折りたたみ中</h2>
@@ -2398,6 +2666,89 @@ function App() {
                 </span>
               </h2>
               <code className="resource-id">{selectedResource.id}</code>
+              <section aria-label="次に追加するリソース" className="resource-suggestions">
+                <h3>次に追加するリソース</h3>
+                {resourceSuggestions.length ? (
+                  <>
+                    <p>
+                      候補を追加すると、そのリソースの次の候補へ進みます。接続は設計上の意図であり、通信・権限の成立は未確認です。
+                    </p>
+                    {suggestionBlocked && (
+                      <p role="status">
+                        DSL に未反映の変更があります。先に解析して反映してください。
+                      </p>
+                    )}
+                    {resourceSuggestions.map((suggestion) => (
+                      <div className="resource-suggestion" key={suggestion.type}>
+                        <button
+                          className="toolbar-button"
+                          disabled={suggestionBlocked}
+                          onClick={() => addSuggestion(suggestion.type)}
+                        >
+                          {suggestion.label} を追加
+                        </button>
+                        <p>{suggestion.reason}</p>
+                        <small>
+                          配置先:{' '}
+                          {diagram?.resources.find((item) => item.id === suggestion.parentId)
+                            ?.label ?? '図の最上位'}
+                        </small>
+                        {suggestion.connection && (
+                          <p>
+                            追加する{kindLabels[suggestion.connection.kind]}:{' '}
+                            {suggestion.connection.reverse
+                              ? `${suggestion.label} → ${selectedResource.label}`
+                              : `${selectedResource.label} → ${suggestion.label}`}
+                            （{suggestion.connection.label}）
+                          </p>
+                        )}
+                        {suggestion.note && <p>{suggestion.note}</p>}
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <p>
+                    この種別の候補はまだありません。別の AWS リソースを選択して追加を続けられます。
+                  </p>
+                )}
+              </section>
+              {selectedResource.unresolved?.length || selectedResource.resolved?.length ? (
+                <section aria-label="確認が必要な情報" className="unresolved-detail">
+                  <h3>確認が必要な情報</h3>
+                  {selectedResource.unresolved?.map((message, index) => (
+                    <div className="resolution-item" key={`${index}-${message}`}>
+                      <p className="warning-copy">{message}</p>
+                      <button
+                        type="button"
+                        onClick={() => setResolution(selectedResource.id, index, true)}
+                        aria-label={`${message}を解決済みにする`}
+                      >
+                        解決済みにする
+                      </button>
+                    </div>
+                  ))}
+                  {!!selectedResource.resolved?.length && <h4>解決済み</h4>}
+                  {selectedResource.resolved?.map((message, index) => (
+                    <div className="resolution-item" key={`${index}-${message}`}>
+                      <p>{message}</p>
+                      <button
+                        type="button"
+                        onClick={() => setResolution(selectedResource.id, index, false)}
+                        aria-label={`${message}を未解決に戻す`}
+                      >
+                        未解決に戻す
+                      </button>
+                    </div>
+                  ))}
+                  <p>
+                    下の「取り込み元」と元の設定を確認し、必要な内容を「属性」で設計値として補足できます。
+                  </p>
+                  <p>
+                    属性を編集しても未解決情報は自動では消えません。解決済みは確認の記録であり、元の
+                    Terraform は変更されません。
+                  </p>
+                </section>
+              ) : null}
               {(diagram?.resources ?? []).filter(
                 (resource) =>
                   resource.type === 'sg' &&
@@ -2504,16 +2855,6 @@ function App() {
                   </div>
                 )}
               </dl>
-              {selectedResource.unresolved?.length ? (
-                <>
-                  <h3>未解決情報</h3>
-                  {selectedResource.unresolved.map((message) => (
-                    <p className="warning-copy" key={message}>
-                      {message}
-                    </p>
-                  ))}
-                </>
-              ) : null}
             </>
           ) : (
             <div className="empty-details">

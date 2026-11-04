@@ -1,0 +1,19 @@
+diagram "業務フロー・購入申請と承認" version=1 {
+  business.lane requester "申請者" {
+    flow.start start "購入の必要が発生"
+    flow.activity request "購入申請を提出"
+    flow.activity revise "申請を修正"
+  }
+  business.lane manager "承認者" {
+    flow.decision decision "予算内か？"
+    flow.activity approve "購入を承認"
+    flow.end done "発注へ進む"
+  }
+  start -> request kind=flow
+  request -> decision kind=flow label="申請内容を確認"
+  decision -> approve kind=flow label="はい"
+  decision -> revise kind=flow label="いいえ"
+  revise -> request kind=flow label="再申請"
+  approve -> done kind=flow
+  view service level=resource direction=DOWN
+}

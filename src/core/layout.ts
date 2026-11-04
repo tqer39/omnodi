@@ -1,3 +1,4 @@
+import { nodeShape } from './notation.js';
 import { applyColumnLayout, placeAnnotations, placeOverlayLabels } from './spatial.js';
 import { evidenceLabels, changeLabels, resourceTypeLabel } from './presentation.js';
 import { validateResourceExpressions } from './architecture.js';
@@ -26,7 +27,7 @@ import type {
 export interface LayoutOptions {
   direction?: 'RIGHT' | 'DOWN';
 }
-export const layoutVersion = 'infra-canvas-layout-12';
+export const layoutVersion = 'omnodi-layout-13';
 
 export const connectionLabel = (edge: Connection): string =>
   [
@@ -34,6 +35,15 @@ export const connectionLabel = (edge: Connection): string =>
       ? `${edge.attributes.route} ${edge.attributes.routeDirection === 'return' ? '復路' : '往路'} ${edge.attributes.step}`
       : undefined,
     edge.attributes.label ?? edgeKindLabels[edge.kind],
+    edge.attributes.polarity === 'positive'
+      ? '+'
+      : edge.attributes.polarity === 'negative'
+        ? '−'
+        : undefined,
+    edge.attributes.delay === true ? '遅延' : undefined,
+    edge.attributes.sourceMultiplicity || edge.attributes.targetMultiplicity
+      ? `多重度 ${edge.attributes.sourceMultiplicity ?? '?'} → ${edge.attributes.targetMultiplicity ?? '?'}`
+      : undefined,
     Array.isArray(edge.attributes.signals)
       ? edge.attributes.signals.map((signal) => telemetrySignalLabels[signal] ?? signal).join(' / ')
       : undefined,
@@ -112,7 +122,11 @@ export async function layoutGraph(
           ),
         );
         const labelLines =
-          compact || collapsed || detailBoundary || content
+          compact ||
+          collapsed ||
+          detailBoundary ||
+          content ||
+          ['diamond', 'ellipse', 'rounded'].includes(nodeShape(resource))
             ? Math.ceil(labelWidth / (width - headerWidth))
             : 1;
         const metaHeight = metadataHeight(metadata, width);
@@ -125,6 +139,10 @@ export async function layoutGraph(
             (content ? contentDimensions(content, width).height : 0) +
             metaHeight,
         };
+        if (['diamond', 'ellipse'].includes(nodeShape(resource)) && !isBoundary(resource)) {
+          node.width = width * 2;
+          node.height = node.height! * 2;
+        }
         if (nested.length) {
           node.children = nested;
           node.layoutOptions = {

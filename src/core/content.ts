@@ -7,7 +7,34 @@ export type ResourceContent =
 
 /** HTMLを解釈しない、図上に表示するテキスト表・リスト。 */
 export function resourceContent(resource: Resource): ResourceContent | undefined {
-  const { display, columns, rows, items } = resource.attributes;
+  const { display, columns, rows, items, fields, operations } = resource.attributes;
+  if (
+    fields !== undefined ||
+    operations !== undefined ||
+    ['uml.class', 'uml.interface'].includes(resource.type)
+  ) {
+    const strings = (value: unknown): value is string[] =>
+      Array.isArray(value) && value.every((item) => typeof item === 'string');
+    if (
+      !['uml.class', 'uml.interface'].includes(resource.type) ||
+      (fields !== undefined && !strings(fields)) ||
+      (operations !== undefined && !strings(operations)) ||
+      [display, columns, rows, items].some((value) => value !== undefined) ||
+      isBoundary(resource)
+    )
+      throw new Error(
+        'fields / operations は UML クラス・インターフェースの文字列配列です。表・リストや境界と併用できません。',
+      );
+    return {
+      kind: 'table',
+      columns: ['属性'],
+      rows: [
+        [(fields as string[] | undefined)?.join('\n') || '—'],
+        ['操作'],
+        [(operations as string[] | undefined)?.join('\n') || '—'],
+      ],
+    };
+  }
   if (
     resource.type === 'sg' &&
     display === undefined &&

@@ -235,9 +235,13 @@ export function parseDSL(source: string): ParseResult {
           'routeDirection',
           'sourcePort',
           'targetPort',
+          'polarity',
+          'delay',
+          'sourceMultiplicity',
+          'targetMultiplicity',
         ].includes(key);
         valid =
-          key === 'encrypted'
+          key === 'encrypted' || key === 'delay'
             ? typeof val === 'boolean'
             : key === 'step'
               ? typeof val === 'number' && Number.isSafeInteger(val) && val > 0
@@ -392,6 +396,7 @@ export function parseDSL(source: string): ParseResult {
             }
           }
           if (Array.isArray(attributes.unresolved)) resource.unresolved = attributes.unresolved;
+          if (Array.isArray(attributes.resolved)) resource.resolved = attributes.resolved;
           try {
             resourceContent(resource);
             validateComputeAttributes(resource);

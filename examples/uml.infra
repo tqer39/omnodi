@@ -1,0 +1,19 @@
+diagram "UML・注文モデルとコンポーネント" version=1 {
+  uml.package domain "注文ドメイン" {
+    uml.class entity "Entity" fields=["+ id: UUID"] operations=["+ equals(other): boolean"] stereotype=abstract
+    uml.class order "Order" fields=["- status: OrderStatus", "- total: Money"] operations=["+ confirm(): void", "+ cancel(): void"]
+    uml.class line "OrderLine" fields=["+ quantity: int", "+ unitPrice: Money"] operations=["+ subtotal(): Money"]
+    uml.class customer "Customer" fields=["+ name: string"] operations=["+ placeOrder(): Order"]
+    uml.interface repository "OrderRepository" operations=["+ save(order): void", "+ find(id): Order"] stereotype=interface
+  }
+  uml.component app "注文アプリケーション" {
+    uml.class order_service "OrderService" operations=["+ checkout(): void"]
+    uml.class adapter "SqlOrderRepository" operations=["+ save(order): void", "+ find(id): Order"]
+  }
+  order -> entity kind=inheritance label="一般化"
+  adapter -> repository kind=realization label="実装"
+  order -> line kind=composition sourceMultiplicity="1" targetMultiplicity="1..*" label="注文明細"
+  customer -> order kind=aggregation sourceMultiplicity="1" targetMultiplicity="0..*" label="注文履歴"
+  order_service -> repository kind=dependency label="保存を依頼"
+  view service level=resource direction=RIGHT
+}

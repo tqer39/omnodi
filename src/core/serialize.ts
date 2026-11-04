@@ -37,6 +37,10 @@ export function serializeDSL(diagram: Diagram): string {
           if (resource.provenance[key] !== undefined) attributes[key] = resource.provenance[key]!;
       }
       if (resource.unresolved?.length) attributes.unresolved = resource.unresolved;
+      if (resource.resolved !== undefined) {
+        if (resource.resolved.length) attributes.resolved = resource.resolved;
+        else delete attributes.resolved;
+      }
       const rendered = Object.entries(attributes)
         .map(([key, value]) => `${identifier(key)}=${encode(value)}`)
         .join(' ');

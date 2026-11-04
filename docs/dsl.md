@@ -1,4 +1,4 @@
-# Infra Canvas DSL 仕様 v1
+# Omnodi DSL 仕様 v1
 
 DSL は宣言的な構成図です。構文と参照の検証は、実際のクラウド構成の妥当性を保証しません。
 設計案を記述でき、HTML、JavaScript、ループ、条件分岐は実行しません。
@@ -74,16 +74,16 @@ SG の関連や許可規則だけで通信成立を断定しません。
 反映した変更は「元に戻す」で取り消せます。
 未知のアイコン名は保持されますが、同梱アイコンがないため代替表示になります。
 
-| 型         | 属性名                                                                                   | 用途                 |
-| ---------- | ---------------------------------------------------------------------------------------- | -------------------- |
-| 文字列     | `description`, `region`, `az`, `cidr`, `protocol`                                        | 説明、配置設定       |
-| 文字列     | `account`, `project`, `subscription`, `scope`, `environment`                             | 管理スコープ         |
-| 文字列     | `status`, `network`, `routeEvidence`, `provider`, `role`, `url`, `version`, `subnetType` | 表示メタデータ       |
-| 文字列配列 | `subnets`, `members`, `securityGroups`, `dependsOn`                                      | リソース ID 参照     |
-| 文字列配列 | `tags`, `unresolved`                                                                     | タグ、未解決情報     |
-| 数値       | `port`, `width`, `height`, `x`, `y`, `line`                                              | 属性情報・座標固定   |
-| boolean    | `public`, `unknown`, `fixed`                                                             | 属性情報・座標固定   |
-| 文字列     | `meta.*`                                                                                 | 拡張用のテキスト属性 |
+| 型         | 属性名                                                                                   | 用途                       |
+| ---------- | ---------------------------------------------------------------------------------------- | -------------------------- |
+| 文字列     | `description`, `region`, `az`, `cidr`, `protocol`                                        | 説明、配置設定             |
+| 文字列     | `account`, `project`, `subscription`, `scope`, `environment`                             | 管理スコープ               |
+| 文字列     | `status`, `network`, `routeEvidence`, `provider`, `role`, `url`, `version`, `subnetType` | 表示メタデータ             |
+| 文字列配列 | `subnets`, `members`, `securityGroups`, `dependsOn`                                      | リソース ID 参照           |
+| 文字列配列 | `tags`, `unresolved`, `resolved`                                                         | タグ、未解決・解決済み情報 |
+| 数値       | `port`, `width`, `height`, `x`, `y`, `line`                                              | 属性情報・座標固定         |
+| boolean    | `public`, `unknown`, `fixed`                                                             | 属性情報・座標固定         |
+| 文字列     | `meta.*`                                                                                 | 拡張用のテキスト属性       |
 
 `x`、`y` と `fixed=true` で座標を固定できます。親内では相対座標です。
 `width` と `height` は属性として保持しますが、カード寸法の固定指定は未対応です。
@@ -93,8 +93,9 @@ Terraform アダプターの属性として `terraformType`、`availability_zone
 
 取り込み元は `sourceKind="plan"` / `"state"` / `"static"` / `"design"` と、
 `repository`、`commit`、`root`、`address`、`file`、`line` に保存します。
-`serializeDSL` は構成モデルの `provenance` と `unresolved` をこれらの属性へ書き出します。
+`serializeDSL` は構成モデルの `provenance` と `unresolved`・`resolved` をこれらの属性へ書き出します。
 `parseDSL` は同じ情報を復元します。ソース位置が未確定なら省略します。
+`resolved` は利用者が確認済みにした記録であり、元の Terraform の変更や検証結果を意味しません。
 
 ## 型付き接続
 
@@ -108,7 +109,8 @@ database -> replica kind=replication
 primary -> standby kind=failover
 ```
 
-`kind` は次の7種類です。省略時は `traffic` です。
+`kind` を省略すると `traffic` です。インフラ向けの7種類を以下に示します。
+UML・業務フロー・因果関係向けの6種類は末尾の「UML・業務フロー・因果ループ」を参照してください。
 
 | kind          | 種類     | 色     | 線種     |
 | ------------- | -------- | ------ | -------- |
@@ -199,7 +201,7 @@ diagram "修正後" {
 ## 公開 API
 
 ```typescript
-import { parseDSL, validateDiagram, buildDisplayGraph, layoutGraph, serializeDSL } from 'infra-canvas';
+import { parseDSL, validateDiagram, buildDisplayGraph, layoutGraph, serializeDSL } from 'omnodi';
 
 const result = parseDSL(source);
 if (!result.diagram) throw new Error(JSON.stringify(result.diagnostics));
@@ -433,3 +435,52 @@ software.envoy mesh "Envoy" configFormat=yaml config="static_resources: {}\n"
 設定内容は不活性な文字列として保持します。Nginx・Envoy の構文検査・デプロイ・設定からの通信線生成は行いません。
 ファイル参照、シェル、テンプレート、HTML は実行せず、往復と単一HTMLで同じテキストを保ちます。
 共有用HTMLに含まれるため、秘密鍵・トークン・パスワードを埋め込まないでください。
+
+## UML・業務フロー・因果ループ
+
+上部「サンプル」の「UML・ビジネス」から、[UML](../examples/uml.infra)、
+[購入申請フロー](../examples/business-flow.infra)、[因果ループ](../examples/causal-loop.infra)を開けます。
+既存のインフラ種別と同じ図に混在でき、属性編集・DSL 保存・オフライン HTML・SVG 出力を使えます。
+
+`uml.package`、`uml.component`、`business.lane` は入れ子境界です。
+`uml.class` と `uml.interface` は `fields` と `operations` の文字列配列を区画として表示します。
+空の区画は `—` を表示します。`display`・`columns`・`rows`・`items` と併用できません。
+可視性・型・シグネチャは文字列として保持し、プログラミング言語の型検査はしません。
+`stereotype` は `«interface»` などのヘッダー表記になります。
+
+```text
+uml.class order "Order" fields=["- total: Money"] operations=["+ confirm(): void"]
+uml.class line "OrderLine" fields=["+ quantity: int"]
+order -> line kind=composition sourceMultiplicity="1" targetMultiplicity="1..*"
+```
+
+| kind          | 意味・向き           | 表記                       |
+| ------------- | -------------------- | -------------------------- |
+| `flow`        | 業務の処理順序       | 実線矢印                   |
+| `cause`       | 原因から結果への仮説 | 実線矢印、正負・遅延ラベル |
+| `inheritance` | 子から親への一般化   | 親側の白抜き三角           |
+| `realization` | 実装から契約への実現 | 破線、契約側の白抜き三角   |
+| `aggregation` | 全体から部分への集約 | 全体側の白抜き菱形         |
+| `composition` | 全体から部分への合成 | 全体側の塗りつぶし菱形     |
+
+`sourceMultiplicity` / `targetMultiplicity` は `"1"`、`"0..1"`、`"0..*"`、`"*"` などの文字列です。
+端点の対応が分かるよう、中央ラベルに「多重度 source → target」と表示します。
+既存の `dependency` / `association` は従来の依存・関連の線種を使います。
+
+`flow.start` / `flow.end` は楕円、`flow.activity` は角丸、`flow.decision` は菱形です。
+分岐条件は接続の `label` に書きます。通常のノードには `shape=rectangle/rounded/ellipse/diamond` を指定できます。
+`business.lane` は担当範囲の囲みであり、BPMN の実行モデルや固定幅のスイムレーンではありません。
+
+```text
+causal.variable load "問い合わせ件数"
+causal.variable satisfaction "顧客満足度"
+load -> satisfaction kind=cause polarity=negative delay=true label="対応待ち"
+```
+
+`polarity=positive` は原因と結果が同方向に、`negative` は逆方向に変化するという仮説です。
+表示は `+` / `−` で、良い・悪いを示しません。`delay=true` は「遅延」を表示します。
+両属性は `kind=cause` 専用で、省略時に正負や遅延を推測しません。循環する因果関係も保持します。
+ループ名（R1 / B1 など）はラベルで記述します。相関からの因果推定、ループの自動判定・数値シミュレーションは行いません。
+
+この記法は UML のクラス・コンポーネント構造、業務順序、因果仮説を記述するためのものです。
+UML 全仕様への適合検証、シーケンス図の時間軸・ライフライン、状態遷移の実行は未対応です。
