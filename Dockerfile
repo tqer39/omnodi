@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c AS build
+FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS build
 WORKDIR /app
 COPY --chmod=0644 package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY . .
 RUN node scripts/build.mjs
 
-FROM node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c AS runtime
+FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS runtime
 ENV NODE_ENV=production
 LABEL org.opencontainers.image.source="https://github.com/tqer39/omnodi"
 WORKDIR /app
