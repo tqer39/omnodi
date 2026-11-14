@@ -1,6 +1,7 @@
 [bootstrap]
-depends = ["project:bootstrap"]
-run = "npm --prefix . ci --ignore-scripts"
+depends = ["standards:bootstrap:npm"]
+depends_post = ["project:bootstrap"]
+run = "echo npm dependencies installed"
 
 [lint]
 depends = ["project:lint"]
@@ -33,6 +34,9 @@ run_windows = '.\.standards\cache\dev-standards.exe plan'
 ["standards:verify"]
 run = "./.standards/cache/dev-standards verify"
 run_windows = '.\.standards\cache\dev-standards.exe verify'
+
+["standards:bootstrap:npm"]
+run = "npm --prefix . ci --ignore-scripts"
 
 ["standards:version"]
 description = "ロックに記録した dev-standards の適用版を表示"
