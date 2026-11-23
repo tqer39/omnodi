@@ -1743,6 +1743,8 @@ function App() {
   }, [tour?.playing]);
   const revealTour = () => {
     if (!tourStep || !diagram) return;
+    // 展開のため詳細範囲を解除しても、利用者のパン・ズームを保持する。
+    autoFitContext.current = { diagram, view, scope: undefined };
     const ancestors = new Set<string>();
     for (const id of [tourStep.source, tourStep.target]) {
       let resource = diagram.resources.find((item) => item.id === id);

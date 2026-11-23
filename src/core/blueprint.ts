@@ -339,6 +339,7 @@ export function generateBlueprint(input: BlueprintAnswers): Blueprint {
       ? [profile.regions.primary, profile.regions.secondary]
       : [profile.regions[answers.region]];
   const home = regions[0]!;
+  const hasReplicaData = answers.storage.length > 0 || ['web', 'static'].includes(answers.purpose);
 
   // 管理境界: 実在の ID は推測せず、未指定として残す。
   let scopeId: string;
@@ -364,14 +365,18 @@ export function generateBlueprint(input: BlueprintAnswers): Blueprint {
       index === 0
         ? []
         : [
-            `${region.label}には保存データの複製先だけを描いています。実行環境と切替手順は未設計です。`,
+            hasReplicaData
+              ? `${region.label}には保存データの複製先だけを描いています。実行環境と切替手順は未設計です。`
+              : `${region.label}は配置未定の境界だけです。保存しない回答のため、複製するデータも実行環境も描いていません。`,
           ],
     ),
   );
   const homeRegion = regionIds[0]!;
   assumptions.push(
     answers.region === 'both'
-      ? `${home.label}（${home.code}）で処理し、${regions[1]!.label}（${regions[1]!.code}）にはデータの複製先だけを置く前提です。`
+      ? hasReplicaData
+        ? `${home.label}（${home.code}）で処理し、${regions[1]!.label}（${regions[1]!.code}）にはデータの複製先だけを置く前提です。`
+        : `${home.label}（${home.code}）で処理します。保存しないため、${regions[1]!.label}（${regions[1]!.code}）は配置未定の境界だけを描きます。`
       : `${home.label}（${home.code}）の1リージョンだけに置く前提です。`,
   );
 
@@ -444,6 +449,11 @@ export function generateBlueprint(input: BlueprintAnswers): Blueprint {
       homeRegion,
       { description: 'HTML・JavaScript・画像などの静的ファイルを置きます。' },
       [
+        ...(answers.purpose === 'web' && answers.delivery === 'github'
+          ? [
+              '配備の矢印は API の実行環境だけを対象としています。画面ファイルの配置手順は未設計です。',
+            ]
+          : []),
         answers.cloud === 'aws'
           ? 'HTTPS と独自ドメインで配信するには CDN（CloudFront 等）と証明書の設計が必要です。この雛形には含めていません。'
           : 'HTTPS と独自ドメインで配信する方式（CDN・証明書）は未設計です。',

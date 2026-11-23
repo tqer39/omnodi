@@ -37,6 +37,29 @@ const withoutLocations = (diagram: Diagram) => ({
 });
 
 describe('質問への回答から作る設計雛形', () => {
+  it('複製対象がない両リージョンと Web の画面配備を未設計として明示する', () => {
+    for (const cloud of blueprintClouds) {
+      for (const purpose of ['api', 'worker'] as const) {
+        const result = generateBlueprint({ ...base, cloud, purpose, region: 'both', storage: [] });
+        assert.equal(
+          result.diagram.connections.some((edge) => edge.kind === 'replication'),
+          false,
+        );
+        assert.ok(result.assumptions.some((text) => text.includes('配置未定の境界だけ')));
+        assert.ok(
+          result.unresolved.some((text) =>
+            text.includes('複製するデータも実行環境も描いていません'),
+          ),
+        );
+        assert.equal(
+          result.unresolved.some((text) => text.includes('複製先だけを描いています')),
+          false,
+        );
+      }
+      const web = generateBlueprint({ ...base, cloud, purpose: 'web', delivery: 'github' });
+      assert.ok(web.unresolved.some((text) => text.includes('画面ファイルの配置手順は未設計')));
+    }
+  });
   it('AWS・API・東京だけ・SQL 保存で、1リージョンの利用者・入口・実行・保存先を順に結ぶ', () => {
     const { diagram, source, unresolved } = generateBlueprint(base);
     const regions = byType(diagram, 'region');

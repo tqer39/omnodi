@@ -95,3 +95,35 @@ test('同じ図でも履歴操作で説明中の接続がなくなると終了�
   await expect(panel).toHaveCount(0);
   await expect(page.locator('.flow-particles')).toHaveCount(0);
 });
+
+for (const mode of ['2D', '3D']) {
+  test(`説明から詳細範囲を解除してもパン・ズームを保持する（${mode}）`, async ({ page }) => {
+    await createApi(page);
+    await page.getByRole('button', { name: mode, exact: true }).click();
+    await page.getByRole('textbox', { name: 'リソース検索' }).fill('アプリケーション VPC');
+    await page.locator('.search-results button').first().click();
+    await page.getByRole('button', { name: '詳細へ移動', exact: true }).click();
+    await expect(page.locator('.scope-bar')).toBeVisible();
+    await page.getByRole('button', { name: '処理の流れ', exact: true }).click();
+    const panel = page.getByRole('region', { name: '処理の流れの説明' });
+    await panel.getByRole('button', { name: /一時停止/ }).click();
+    const world = page.locator(mode === '2D' ? '.react-flow__viewport' : '.spatial-world');
+    const transform = () =>
+      world.evaluate(async (element) => {
+        for (let frame = 0; frame < 35; frame++) await new Promise(requestAnimationFrame);
+        return getComputedStyle(element).transform;
+      });
+    await transform();
+    await page.mouse.move(500, 360);
+    await page.mouse.wheel(120, 0);
+    await page.mouse.wheel(0, 70);
+    const before = await transform();
+    await panel.getByRole('button', { name: '折りたたみを開いて表示', exact: true }).click();
+    await expect(page.locator('.scope-bar')).toHaveCount(0);
+    await expect(panel.locator('.walkthrough-hidden')).toHaveCount(0);
+    expect(await transform()).toBe(before);
+    // 視点の移動は専用ボタンで明示的に行う。
+    await panel.getByRole('button', { name: '画面に表示', exact: true }).click();
+    await expect.poll(transform).not.toBe(before);
+  });
+}
