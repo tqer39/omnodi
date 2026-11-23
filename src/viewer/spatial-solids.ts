@@ -338,12 +338,15 @@ export function solidKind(
   const shape = nodeShape(resource);
   if (shape === 'diamond') return 'decision';
   if (shape === 'ellipse') return 'terminal';
-  const exact = exactKinds[resource.type];
+  const exact = Object.hasOwn(exactKinds, resource.type) ? exactKinds[resource.type] : undefined;
   if (exact) return exact;
   if (/^(uml|flow|business)\./.test(resource.type)) return 'generic';
   return (
     tokenKind(resource.type) ??
-    (iconType !== resource.type ? (exactKinds[iconType] ?? tokenKind(iconType)) : undefined) ??
+    (iconType !== resource.type
+      ? ((Object.hasOwn(exactKinds, iconType) ? exactKinds[iconType] : undefined) ??
+        tokenKind(iconType))
+      : undefined) ??
     'generic'
   );
 }
@@ -630,6 +633,24 @@ function upright(
   return { faces };
 }
 
+/** 面の辺から法線を求め、立体の中心に背を向ける向きに揃える。 */
+function geometricNormal(points: V3[], center: V3): V3 {
+  const [a, b, c] = points;
+  const u = b!.map((value, axis) => value - a![axis]!) as unknown as V3;
+  const v = c!.map((value, axis) => value - a![axis]!) as unknown as V3;
+  const normal: V3 = [
+    u[1] * v[2] - u[2] * v[1],
+    u[2] * v[0] - u[0] * v[2],
+    u[0] * v[1] - u[1] * v[0],
+  ];
+  const outward = [0, 1, 2].map(
+    (axis) => points.reduce((sum, point) => sum + point[axis]!, 0) / points.length - center[axis]!,
+  );
+  return normal[0] * outward[0]! + normal[1] * outward[1]! + normal[2] * outward[2]! < 0
+    ? [-normal[0], -normal[1], -normal[2]]
+    : normal;
+}
+
 function octahedron(
   cx: number,
   cy: number,
@@ -652,10 +673,9 @@ function octahedron(
       [top, index % 2 ? colors.alt : colors.main],
       [bottom, index % 2 ? colors.dark : colors.main],
     ] as const) {
-      const centroid = [0, 1, 2].map((axis) => (point[axis]! + next[axis]! + apex[axis]!) / 3);
       faces.push({
         points: [point, next, apex],
-        normal: [centroid[0]! - cx, centroid[1]! - cy, centroid[2]! - middle],
+        normal: geometricNormal([point, next, apex], [cx, cy, middle]),
         color,
       });
     }
@@ -790,7 +810,15 @@ export function diamondTip(
   const side: V3 = Math.abs(d[2]) > 0.9 ? [1, 0, 0] : [-d[1], d[0], 0];
   const sl = Math.hypot(...side) || 1;
   const across: V3 = [(side[0] / sl) * radius, (side[1] / sl) * radius, (side[2] / sl) * radius];
-  const up: V3 = [0, 0, radius * 0.8];
+  const perpendicular: V3 = [
+    d[1] * across[2] - d[2] * across[1],
+    d[2] * across[0] - d[0] * across[2],
+    d[0] * across[1] - d[1] * across[0],
+  ];
+  const perpendicularLength = Math.hypot(...perpendicular) || 1;
+  const up = perpendicular.map(
+    (value) => (value / perpendicularLength) * radius * 0.8,
+  ) as unknown as V3;
   const ring: V3[] = [
     [middle[0] + across[0], middle[1] + across[1], middle[2] + across[2]],
     [middle[0] + up[0], middle[1] + up[1], middle[2] + up[2]],
@@ -801,10 +829,11 @@ export function diamondTip(
   ring.forEach((point, index) => {
     const next = ring[(index + 1) % 4]!;
     for (const apex of [tip, end]) {
-      const centroid = [0, 1, 2].map(
-        (axis) => (point[axis]! + next[axis]! + apex[axis]!) / 3 - middle[axis]!,
-      );
-      faces.push({ points: [point, next, apex], normal: centroid as unknown as V3, color });
+      faces.push({
+        points: [point, next, apex],
+        normal: geometricNormal([point, next, apex], middle),
+        color,
+      });
     }
   });
   return { faces };

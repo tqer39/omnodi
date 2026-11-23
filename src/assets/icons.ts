@@ -258,7 +258,8 @@ const icons: Record<string, string> = {
   'azure.storage': azure_storage,
 };
 export const getIconTypes = (): string[] => Object.keys(icons).sort();
-export const getIcon = (type: string): string | undefined => icons[type];
+export const getIcon = (type: string): string | undefined =>
+  Object.hasOwn(icons, type) ? icons[type] : undefined;
 export const iconTypes = Object.keys(icons).sort();
 
 export const getIconHomepage = (type: string): string | undefined =>

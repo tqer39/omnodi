@@ -1864,11 +1864,12 @@ function App() {
             </select>
           </label>
           <p>現在のビューと固定位置を反映します。PDFは印刷画面から保存できます。</p>
+          {showSpatial && <p>画像出力・印刷は 2D 表示で利用できます。</p>}
           {(['svg', 'png', 'pdf'] as const).map((format) => (
             <button
               className="toolbar-button"
               key={format}
-              disabled={busy || !lastLayout}
+              disabled={busy || !lastLayout || showSpatial}
               onClick={() => void exportDrawing(format)}
             >
               {format === 'pdf' ? '印刷 / PDF を保存' : `${format.toUpperCase()} をダウンロード`}

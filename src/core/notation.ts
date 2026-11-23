@@ -1,19 +1,17 @@
 import { isBoundary, type Connection, type Resource } from './model.js';
 
 export const nodeShapes = ['rectangle', 'rounded', 'ellipse', 'diamond'] as const;
+const defaultShapes: Record<string, string> = {
+  'flow.decision': 'diamond',
+  'flow.start': 'ellipse',
+  'flow.end': 'ellipse',
+  'flow.activity': 'rounded',
+  'uml.usecase': 'ellipse',
+};
 export function nodeShape(resource: Resource): string {
   return String(
     resource.attributes.shape ??
-      (
-        {
-          'flow.decision': 'diamond',
-          'flow.start': 'ellipse',
-          'flow.end': 'ellipse',
-          'flow.activity': 'rounded',
-          'uml.usecase': 'ellipse',
-        } as Record<string, string>
-      )[resource.type] ??
-      'rectangle',
+      (Object.hasOwn(defaultShapes, resource.type) ? defaultShapes[resource.type] : 'rectangle'),
   );
 }
 export function validateNotationResource(resource: Resource): void {

@@ -219,11 +219,19 @@ export function SpatialViewport({
         ignoreClick.current = event.button === 0 && drag.current.moved;
         drag.current = undefined;
       }}
-      onLostPointerCapture={() => {
+      onLostPointerCapture={(event) => {
+        if (drag.current?.id !== event.pointerId) return;
         drag.current = undefined;
+        if (rotationFrame.current !== undefined) cancelAnimationFrame(rotationFrame.current);
+        rotationFrame.current = undefined;
+        rotationDelta.current = { x: 0, y: 0 };
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(event) => {
+        if (drag.current?.id !== event.pointerId) return;
         drag.current = undefined;
+        if (rotationFrame.current !== undefined) cancelAnimationFrame(rotationFrame.current);
+        rotationFrame.current = undefined;
+        rotationDelta.current = { x: 0, y: 0 };
       }}
     >
       <div
