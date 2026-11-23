@@ -6,12 +6,10 @@ import { renderSVG, printDocument, type PrintOptions } from '../core/static-svg'
 import { ChatPanel } from './ChatPanel';
 import { CvePanel } from './CvePanel';
 import { Magnifier } from './Magnifier';
-import {
-  absolutePlacements,
-  bridgePath,
-  curvedRoutePath,
-  nearestPathPoint,
-} from '../core/geometry';
+import { SpatialView } from './SpatialView';
+import type { SpatialViewControls } from './SpatialViewport';
+import { absolutePlacements, bridgePath } from '../core/geometry';
+import { connectionPath, connectionLabelAnchor } from './connection-path';
 import { resourceMetadata } from '../core/resource-metadata';
 import { resourceContent } from '../core/content';
 import {
@@ -63,6 +61,7 @@ import {
   type View,
   type Resource,
   type DisplayGraph,
+  type EdgeRoute,
   type LayoutResult,
 } from '../core/model';
 import { getIcon, getIconHomepage } from '../assets/icons';
@@ -286,7 +285,15 @@ function RegionFlag({ resource }: { resource: Resource }) {
   );
 }
 
-function ResourceCard({ data }: NodeProps<ResourceNode>) {
+function ResourceFace({
+  data,
+  onSelect,
+  selected,
+}: {
+  data: ResourceData;
+  onSelect?: () => void;
+  selected?: boolean;
+}) {
   const { resource, collapsed, onToggle, related, muted } = data;
   const boundary = isBoundary(resource);
   const icon = getIcon(data.iconType);
@@ -319,6 +326,15 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
       data-appearance={String(resource.attributes.appearance ?? 'default')}
       className={`resource-card ${data.compact ? 'compact-card' : ''} ${boundary && !collapsed ? 'boundary-card' : ''} ${boundary && resource.type.startsWith('aws.') ? 'detail-boundary-card' : ''} ${collapsed ? 'collapsed-card' : ''} ${related ? 'related' : ''} ${muted ? 'muted' : ''}`}
     >
+      {onSelect && (
+        <button
+          type="button"
+          className="spatial-node-select"
+          aria-label={resource.label}
+          aria-pressed={selected}
+          onClick={onSelect}
+        />
+      )}
       {shaped && (
         <svg
           className="notation-outline"
@@ -335,9 +351,10 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
           )}
         </svg>
       )}
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
-      {Array.isArray(resource.attributes.ports) &&
+      {!onSelect && <Handle type="target" position={Position.Left} />}
+      {!onSelect && <Handle type="source" position={Position.Right} />}
+      {!onSelect &&
+        Array.isArray(resource.attributes.ports) &&
         resource.attributes.ports.map((port, index, ports) => (
           <span key={port}>
             <Handle
@@ -462,7 +479,10 @@ function ResourceCard({ data }: NodeProps<ResourceNode>) {
     </div>
   );
 }
-function AnnotationCard({ data }: NodeProps<ResourceNode>) {
+function ResourceCard({ data }: NodeProps<ResourceNode>) {
+  return <ResourceFace data={data} />;
+}
+function AnnotationCard({ data }: { data: ResourceData }) {
   return (
     <aside className="annotation-card" data-note-id={data.resource.id}>
       <strong>{data.resource.label}</strong>
@@ -471,37 +491,13 @@ function AnnotationCard({ data }: NodeProps<ResourceNode>) {
   );
 }
 const nodeTypes = { resource: ResourceCard, annotation: AnnotationCard };
-type RouteData = {
-  points: { x: number; y: number }[];
-  label?: { x: number; y: number };
-  labelAnchor?: { x: number; y: number };
-};
 function RoutedConnection(props: EdgeProps) {
-  const route = props.data?.route as RouteData | undefined;
+  const route = props.data?.route as EdgeRoute | undefined;
   const curved = props.data?.edgeShape === 'bezier';
   const fallback = curved ? getBezierPath(props) : getSmoothStepPath(props);
-  const path = route?.points.length
-    ? curved
-      ? curvedRoutePath(
-          route.points,
-          (props.data?.curveObstacles ?? []) as {
-            x: number;
-            y: number;
-            width: number;
-            height: number;
-          }[],
-          Number(props.data?.parallelOffset ?? 0),
-        )
-      : String(props.data?.routedPath ?? bridgePath(route.points, []))
-    : fallback[0];
+  const path = route?.points.length ? connectionPath(route, props.data) : fallback[0];
   const labelPosition = route?.label ?? { x: fallback[1], y: fallback[2] };
-  const curveAnchor = curved ? nearestPathPoint(path, labelPosition) : undefined;
-  const labelAnchor = curved
-    ? curveAnchor &&
-      Math.hypot(curveAnchor.x - labelPosition.x, curveAnchor.y - labelPosition.y) > 16
-      ? curveAnchor
-      : undefined
-    : route?.labelAnchor;
+  const labelAnchor = connectionLabelAnchor(path, labelPosition, curved, route?.labelAnchor);
   const markerId = `notation-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const marker = connectionMarker({ kind: props.data?.kind as Connection['kind'] });
   const atStart = marker === 'diamond' || marker === 'filled-diamond';
@@ -631,6 +627,10 @@ function App() {
   const [exportScale, setExportScale] = useState(1);
   const [printPages, setPrintPages] = useState<NonNullable<PrintOptions['pages']>>('fit');
   const [editLayout, setEditLayout] = useState(false);
+  const [showSpatial, setShowSpatial] = useState(false);
+  const showSpatialRef = useRef(showSpatial);
+  showSpatialRef.current = showSpatial;
+  const spatialControls = useRef<SpatialViewControls>(null);
   const [showMembership, setShowMembership] = useState(false);
   const [viewDisplayName, setViewDisplayName] = useState('');
   const [overlayBoxes, setOverlayBoxes] = useState<
@@ -719,6 +719,10 @@ function App() {
         ? { minZoom: zoom, maxZoom: zoom, interpolate: 'linear' as const }
         : {}),
     });
+  };
+  const fitResource = (id: string) => {
+    if (showSpatialRef.current) spatialControls.current?.fit([id]);
+    else void fitView({ nodes: [{ id }], padding: 0.7, maxZoom: 1.2, duration: 450 });
   };
   useEffect(() => {
     if (!magnifierActive) return;
@@ -1056,7 +1060,13 @@ function App() {
             labelBgStyle: { fill: '#fff', fillOpacity: 0.95 },
             labelBgPadding: [5, 3] as [number, number],
             type: 'routed',
-            data: { route: routes.get(edge.id), kind: edge.kind, compact: layout.compact },
+            data: {
+              route: routes.get(edge.id),
+              kind: edge.kind,
+              compact: layout.compact,
+              // 3D では監視信号を通常の通信と別の床下レーンに通す。
+              signals: edge.attributes.signals,
+            },
           })),
         );
         setGraph(display);
@@ -1108,6 +1118,7 @@ function App() {
     const frame = requestAnimationFrame(() => {
       autoFitContext.current = context;
       void fitView({ padding: lastLayout?.compact ? 0.06 : 0.14, duration: 250 });
+      spatialControls.current?.fit();
     });
     return () => cancelAnimationFrame(frame);
   }, [graph, flow]);
@@ -1221,10 +1232,10 @@ function App() {
               (parallel.findIndex((other) => other.id === edge.id) - (parallel.length - 1) / 2) *
               64,
             routedPath: bridgePath(
-              (edge.data?.route as RouteData | undefined)?.points ?? [],
+              (edge.data?.route as EdgeRoute | undefined)?.points ?? [],
               edges
                 .filter((other) => other.id.localeCompare(edge.id, 'en') < 0)
-                .map((other) => (other.data?.route as RouteData | undefined)?.points ?? []),
+                .map((other) => (other.data?.route as EdgeRoute | undefined)?.points ?? []),
             ),
             onSelect: selectConnection,
             accessibleLabel: `${graph?.resources.find((resource) => resource.id === edge.source)?.label ?? edge.source} → ${graph?.resources.find((resource) => resource.id === edge.target)?.label ?? edge.target}: ${edge.label}`,
@@ -1349,7 +1360,7 @@ function App() {
       );
     if (!needsLayout) {
       pendingFocus.current = undefined;
-      void fitView({ nodes: [{ id }], padding: 0.7, maxZoom: 1.2, duration: 450 });
+      fitResource(id);
       return;
     }
     pendingFocus.current = { id, previousGraph: graph };
@@ -1370,12 +1381,7 @@ function App() {
     const representative = pending.id;
     if (nodes.some((node) => node.id === representative)) {
       const frame = requestAnimationFrame(() => {
-        void fitView({
-          nodes: [{ id: representative }],
-          padding: 0.7,
-          maxZoom: 1.2,
-          duration: 450,
-        });
+        fitResource(representative);
         pendingFocus.current = undefined;
       });
       return () => cancelAnimationFrame(frame);
@@ -1858,11 +1864,12 @@ function App() {
             </select>
           </label>
           <p>現在のビューと固定位置を反映します。PDFは印刷画面から保存できます。</p>
+          {showSpatial && <p>画像出力・印刷は 2D 表示で利用できます。</p>}
           {(['svg', 'png', 'pdf'] as const).map((format) => (
             <button
               className="toolbar-button"
               key={format}
-              disabled={busy || !lastLayout}
+              disabled={busy || !lastLayout || showSpatial}
               onClick={() => void exportDrawing(format)}
             >
               {format === 'pdf' ? '印刷 / PDF を保存' : `${format.toUpperCase()} をダウンロード`}
@@ -1911,17 +1918,38 @@ function App() {
           </aside>
         )}
         <div
-          className="canvas-area"
+          className={`canvas-area${showSpatial ? ' spatial-active' : ''}`}
           ref={canvas}
           style={{ '--edge-label-z-index': labelLayer } as CSSProperties}
         >
           <div className="canvas-toolbar" role="group" aria-label="図の操作">
             <div className="display-controls toolbar-group" role="group" aria-label="表示">
+              <div className="projection-picker" role="group" aria-label="図の投影">
+                {(['2D', '3D'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="toolbar-button"
+                    aria-pressed={showSpatial === (mode === '3D')}
+                    onClick={() => {
+                      setHovered(undefined);
+                      setShowSpatial(mode === '3D');
+                    }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
               <button
                 className="toolbar-button"
+                disabled={showSpatial}
                 aria-label="ルーペ"
                 aria-pressed={magnifierActive}
-                title="ポインター周辺を2倍に拡大（起動中は縮尺を固定・Escで終了）"
+                title={
+                  showSpatial
+                    ? 'ルーペは 2D 表示で使えます'
+                    : 'ポインター周辺を2倍に拡大（起動中は縮尺を固定・Escで終了）'
+                }
                 onClick={() => {
                   if (magnifierActive) setMagnifierZoom(undefined);
                   else {
@@ -2308,13 +2336,15 @@ function App() {
               <button
                 className="toolbar-button"
                 aria-pressed={editLayout}
-                disabled={Boolean(scope)}
+                disabled={Boolean(scope) || showSpatial}
                 title={
-                  scope
-                    ? '配置は全体表示で編集できます'
-                    : editLayout
-                      ? '移動を完了してレイアウト編集を終了します'
-                      : 'ノードを移動し、DSLへ位置を保存します'
+                  showSpatial
+                    ? '2D 表示で配置を編集できます'
+                    : scope
+                      ? '配置は全体表示で編集できます'
+                      : editLayout
+                        ? '移動を完了してレイアウト編集を終了します'
+                        : 'ノードを移動し、DSLへ位置を保存します'
                 }
                 onClick={() => setEditLayout(!editLayout)}
               >
@@ -2372,7 +2402,7 @@ function App() {
               </div>
             )}
           </div>
-          {editLayout && (
+          {editLayout && !showSpatial && (
             <aside className="layout-help" role="status">
               カードをドラッグして移動します。移動した配置は固定され、DSLに保存されます。
               「移動を完了」で終了し、「固定を解除」で自動配置に戻せます。
@@ -2514,6 +2544,35 @@ function App() {
             />
             {magnifierActive && <Magnifier />}
           </ReactFlow>
+          <SpatialView
+            ref={spatialControls}
+            active={showSpatial}
+            layout={lastLayout}
+            nodes={renderedNodes}
+            edges={renderedEdges}
+            overlays={showMembership ? graph?.overlays : undefined}
+            onClear={clearSelection}
+            onHover={setHovered}
+            onSelectEdge={selectConnection}
+            onSelectNode={(id) => {
+              setSelectedEdge(undefined);
+              setSelected(id);
+            }}
+            renderNode={(node) =>
+              node.type === 'annotation' ? (
+                <AnnotationCard data={node.data} />
+              ) : (
+                <ResourceFace
+                  data={node.data}
+                  selected={node.selected}
+                  onSelect={() => {
+                    setSelectedEdge(undefined);
+                    setSelected(node.id);
+                  }}
+                />
+              )
+            }
+          />
           {busy && (
             <div className="layout-status" role="status">
               構成を配置しています…

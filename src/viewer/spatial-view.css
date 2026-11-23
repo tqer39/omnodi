@@ -1,0 +1,395 @@
+.projection-picker {
+  display: flex;
+  gap: 2px;
+  border-radius: 5px;
+  background: #f1f5f6;
+  padding: 1px;
+}
+.canvas-toolbar .projection-picker .toolbar-button {
+  min-width: 34px;
+  padding-inline: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.canvas-toolbar .projection-picker .toolbar-button[aria-pressed='true'] {
+  background: #235e56;
+  color: #fff;
+}
+.canvas-area.spatial-active {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvas-area.spatial-active > .react-flow,
+.spatial-view {
+  grid-area: 2 / 1;
+}
+.canvas-area.spatial-active > .react-flow {
+  visibility: hidden;
+}
+
+/* 視点の上方を明るく、手前を暗くして奥行きのある空間に見せる。 */
+.spatial-view {
+  position: relative;
+  overflow: clip;
+  background: radial-gradient(120% 90% at 50% 0%, #fbfdfd 0%, #e9f0f0 55%, #d6e1e1 100%);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.spatial-view:active {
+  cursor: grabbing;
+}
+.spatial-world,
+.spatial-drawing {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.spatial-floor-plane {
+  fill: #f4f8f7;
+  stroke: #c9d7d5;
+  stroke-width: 1;
+}
+.spatial-floor-grid {
+  fill: none;
+  stroke: #cfdcd9;
+  stroke-width: 0.8;
+}
+.spatial-shadows polygon {
+  fill: #1d3a35;
+  opacity: 0.16;
+}
+.spatial-slab-rim {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.spatial-slab.related .spatial-slab-rim {
+  stroke-width: 2.6;
+}
+
+/* 配管は縁・胴・艶の3層で円筒に見せる。 */
+.spatial-route path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.spatial-route {
+  pointer-events: visiblePainted;
+  cursor: pointer;
+}
+.spatial-tube-shine {
+  opacity: 0.75;
+}
+.spatial-tube-pattern {
+  opacity: 0.7;
+}
+.spatial-tube-glow {
+  stroke: #1fb3a1;
+  opacity: 0.22;
+}
+.spatial-tube-chevron {
+  fill: none !important;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+.spatial-port {
+  fill: #1c2a35;
+}
+.spatial-air-shadow {
+  fill: none;
+  stroke: #17302c;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.2;
+}
+.spatial-air-hanger {
+  fill: none;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+.spatial-fence-wall {
+  fill-opacity: 0.07;
+  stroke: none;
+}
+.spatial-fence-edge {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-dasharray: 8 6;
+}
+.spatial-fence-post {
+  fill: none;
+  stroke-width: 1.2;
+  opacity: 0.7;
+}
+
+.spatial-solid {
+  pointer-events: visiblePainted;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.spatial-solid-shadow {
+  fill: #13302b;
+  opacity: 0.14;
+}
+.spatial-solid-ring {
+  fill: #1fb3a1;
+  fill-opacity: 0.12;
+  stroke: #198779;
+  stroke-width: 2;
+}
+.spatial-solid.selected .spatial-solid-ring {
+  fill-opacity: 0.22;
+  stroke-width: 3;
+}
+.spatial-solid:hover polygon:not(.spatial-solid-shadow) {
+  filter: brightness(1.06);
+}
+.spatial-leader {
+  stroke: #7d9599;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* 文字は投影せず画面に正対させ、拡大・回転しても読めるようにする。 */
+.spatial-item {
+  position: absolute;
+  pointer-events: auto;
+}
+.spatial-item .resource-card {
+  height: auto;
+}
+.spatial-item .notation-outline {
+  display: none;
+}
+.spatial-item
+  .resource-card:is([data-shape='diamond'], [data-shape='ellipse'])
+  > :is(
+    .resource-heading,
+    .resource-metadata,
+    .resource-content,
+    .collapsed-hint,
+    .unresolved-badge
+  ) {
+  margin-left: 0;
+  margin-right: 0;
+}
+.spatial-item .resource-card .resource-text {
+  gap: 1px;
+}
+.spatial-item .resource-card .resource-text strong {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+.spatial-item .resource-type {
+  color: #536f7c;
+  overflow-wrap: anywhere;
+}
+.spatial-item .resource-metadata dt {
+  flex-basis: 40%;
+}
+.spatial-item :is(.collapsed-hint, .unresolved-badge) {
+  position: static;
+  display: inline-block;
+  margin: 0 10px 6px;
+}
+
+/* 立体の名札。カードではなく、立体の手前に浮かぶ半透明の銘板にする。 */
+.spatial-caption .resource-card {
+  border: 0;
+  border-radius: 7px;
+  /* 背後の配管や矢じりが透けて文字を読みにくくしないよう、ほぼ不透明にする。 */
+  background: #fffffff2;
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 2px 6px #17423a1f;
+  text-align: center;
+}
+.spatial-caption .resource-heading {
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px 5px;
+}
+.spatial-caption .service-icon,
+.spatial-caption .fallback-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+}
+.spatial-caption .resource-text {
+  align-items: center;
+}
+.spatial-caption .resource-text strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f3a4a;
+}
+.spatial-caption .resource-label {
+  justify-content: center;
+}
+.spatial-caption .resource-metadata {
+  margin: 0 8px 6px;
+  text-align: left;
+  font-size: 10px;
+  line-height: 14px;
+}
+.spatial-caption .resource-metadata > div {
+  padding: 0;
+}
+.spatial-caption .resource-metadata dd {
+  font-size: 10px;
+  line-height: 14px;
+}
+.spatial-caption .resource-content {
+  text-align: left;
+}
+.spatial-caption.muted {
+  opacity: 0.4;
+}
+
+/* 境界の見出しは台座の色の帯を持つ旗にする。 */
+.spatial-header .resource-card {
+  border: 1px solid color-mix(in srgb, var(--slab-accent, #6f8f8a) 45%, white);
+  border-left: 5px solid var(--slab-accent, #6f8f8a);
+  border-radius: 6px;
+  background: #fbfdfdeb;
+  box-shadow: 0 3px 10px #17423a24;
+}
+.spatial-header .resource-heading {
+  padding: 6px 10px;
+  gap: 8px;
+}
+.spatial-header .service-icon,
+.spatial-header .fallback-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 17px;
+}
+.spatial-header .resource-text strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+.spatial-header .resource-metadata {
+  margin: 0 10px 6px;
+}
+
+.spatial-note .annotation-card {
+  position: relative;
+  inset: auto;
+  box-shadow: 0 6px 14px #5c4a0f29;
+  transform: rotate(-1deg);
+}
+.spatial-node-select {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.spatial-item :is(.boundary-toggle, .service-name-link, .service-icon-link, .unresolved-badge) {
+  position: relative;
+  z-index: 2;
+}
+.spatial-node-select[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px #218f82;
+}
+.spatial-view button:focus-visible {
+  outline: 3px solid #176f65;
+  outline-offset: 2px;
+}
+.spatial-edge-label {
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  box-shadow: 0 1px 4px #17423a29;
+}
+.spatial-edge-label[data-tier='under'] {
+  border-style: dashed;
+  border-left-style: solid;
+}
+.spatial-edge-label:is(:focus-visible, [aria-pressed='true']) {
+  z-index: 4;
+}
+.spatial-overlay-label {
+  position: absolute;
+  padding: 4px 7px;
+  border: 1px dashed #79518f;
+  border-radius: 4px;
+  color: #654279;
+  background: #fff;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.spatial-controls {
+  position: absolute;
+  bottom: 18px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid #bdceca;
+  border-radius: 7px;
+  padding: 2px;
+  background: #fff;
+  box-shadow: 0 2px 8px #284f471a;
+}
+.spatial-controls button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #214e48;
+  background: transparent;
+}
+.spatial-controls button:hover {
+  background: #e1efec;
+}
+.spatial-controls-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 3px;
+  background: #d3e0dd;
+}
+.spatial-legend {
+  position: absolute;
+  right: 14px;
+  bottom: 18px;
+  display: grid;
+  gap: 3px;
+  padding: 7px 10px;
+  border: 1px solid #c9d8d5;
+  border-radius: 7px;
+  background: #ffffffe6;
+  color: #36524d;
+  font-size: 11px;
+  pointer-events: none;
+}
+.spatial-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 3px solid #7a8c99;
+  border-radius: 2px;
+}
+.spatial-legend [data-tier='air']::before {
+  border-top-color: #7047b8;
+  transform: translateY(-4px);
+}
+.spatial-legend [data-tier='under']::before {
+  border-top-color: #0072b2;
+  transform: translateY(4px);
+}
