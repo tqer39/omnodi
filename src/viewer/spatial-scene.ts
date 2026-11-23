@@ -8,8 +8,17 @@ import {
   type Resource,
 } from '../core/model';
 import { resourceAppearance } from '../core/presentation';
-import { buildSolid, solidColors, solidKind, type Solid, type SolidKind } from './spatial-solids';
-import { mix, type Point, type V3 } from './spatial-math';
+import {
+  buildOctocat,
+  buildSolid,
+  logoPlaque,
+  solidColors,
+  solidKind,
+  type Solid,
+  type SolidEmblem,
+  type SolidKind,
+} from './spatial-solids';
+import { defaultOrientation, mix, type Point, type V3 } from './spatial-math';
 
 export type RouteTier = 'under' | 'surface' | 'air';
 export interface SceneNodeInput {
@@ -17,6 +26,8 @@ export interface SceneNodeInput {
   resource: Resource;
   collapsed: boolean;
   iconType?: string;
+  /** 公式ロゴ・キャラクターで表す場合の指定。境界・折りたたみには使わない。 */
+  emblem?: SolidEmblem;
 }
 export interface SceneEdgeInput {
   id: string;
@@ -46,9 +57,14 @@ export interface SceneSolid {
   top: number;
   size: number;
   solid: Solid;
+  emblem?: SolidEmblem;
+  /** 選択・ホバー時に差し替える形（Octocat が手を振るポーズ）。 */
+  activeSolid?: Solid;
 }
 export interface SceneRoute {
   id: string;
+  source: string;
+  target: string;
   kind: EdgeKind;
   tier: RouteTier;
   telemetry: boolean;
@@ -215,8 +231,26 @@ export function buildScene(
         : appearance.borderColor && node.resource.attributes.change
           ? mix(solidColors[kind], appearance.borderColor, 0.45)
           : solidColors[kind];
-    const solid = buildSolid(kind, center.x, center.y, base, size, color);
-    const item = {
+    const emblem = kind === 'collapsed' ? undefined : node.emblem;
+    let solid = buildSolid(kind, center.x, center.y, base, size, color);
+    let activeSolid: Solid | undefined;
+    if (emblem?.kind === 'octocat') {
+      solid = { ...buildOctocat(center.x, center.y, base, size), kind };
+      activeSolid = { ...buildOctocat(center.x, center.y, base, size, 'wave'), kind };
+    } else if (emblem?.kind === 'aws-logo') {
+      // 向きに合わせた形は描画時に作り直す。ここでは既定の向きで高さを決める。
+      const plaque = logoPlaque(
+        center.x,
+        center.y,
+        base,
+        size,
+        emblem.color,
+        emblem.tile,
+        defaultOrientation,
+      );
+      solid = { kind, parts: plaque.parts, height: plaque.height };
+    }
+    const item: SceneSolid = {
       id: node.id,
       resource: node.resource,
       box,
@@ -226,6 +260,8 @@ export function buildScene(
       top: base + solid.height,
       size,
       solid,
+      ...(emblem ? { emblem } : {}),
+      ...(activeSolid ? { activeSolid } : {}),
     };
     solids.push(item);
     solidById.set(node.id, item);
@@ -353,6 +389,8 @@ export function buildScene(
     }
     routes.push({
       id: edge.id,
+      source: edge.source,
+      target: edge.target,
       kind: edge.kind,
       tier,
       telemetry,
@@ -388,5 +426,24 @@ export function buildScene(
     center: { x: (extent.left + extent.right) / 2, y: (extent.top + extent.bottom) / 2 },
     extent,
     surfaceAt,
+  };
+}
+
+/** 視点へ向く立体の高さが変わっても、上空の経路を現在の上端へ接続する。 */
+export function retargetAirRoute(route: SceneRoute, tops: ReadonlyMap<string, number>): SceneRoute {
+  if (route.tier !== 'air' || route.points.length < 2) return route;
+  const first = route.points[0]!;
+  const last = route.points.at(-1)!;
+  const start = tops.get(route.source) ?? first[2];
+  const end = tops.has(route.target) ? tops.get(route.target)! + 1 : last[2];
+  const lift = Math.max(0, start - first[2], end - last[2]);
+  return {
+    ...route,
+    points: route.points.map(([x, y, z], index): V3 => [
+      x,
+      y,
+      index === 0 ? start : index === route.points.length - 1 ? end : z + lift,
+    ]),
+    label: [route.label[0], route.label[1], route.label[2] + lift],
   };
 }

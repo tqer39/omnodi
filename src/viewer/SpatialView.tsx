@@ -37,8 +37,24 @@ import {
   type Projector,
   type V3,
 } from './spatial-math';
-import { buildScene, type RouteTier, type Scene, type SceneRoute } from './spatial-scene';
-import { arrowCone, diamondTip, slabPart, solidKindLabels, type SolidPart } from './spatial-solids';
+import {
+  buildScene,
+  retargetAirRoute,
+  type RouteTier,
+  type Scene,
+  type SceneRoute,
+} from './spatial-scene';
+import {
+  arrowCone,
+  diamondTip,
+  logoPlaque,
+  slabPart,
+  solidKindLabels,
+  type SolidPart,
+} from './spatial-solids';
+import { resolveEmblem } from './spatial-emblems';
+import { getIcon } from '../assets/icons';
+import { FlowParticles, usePrefersReducedMotion } from './FlowParticles';
 import './spatial-view.css';
 
 type SpatialNode = Node<{
@@ -270,11 +286,12 @@ function Tube({
 }) {
   const color = String(edge.style?.stroke ?? '#596579');
   const base = drawn.route.telemetry ? 3.4 : tubeWidths[drawn.route.tier];
-  const width = edge.selected ? base + 1.8 : base;
+  const flow = edge.data?.flow as 'playing' | 'paused' | undefined;
+  const width = edge.selected || flow ? base + 1.8 : base;
   const dash = edge.style?.strokeDasharray;
   return (
     <g
-      className={`spatial-route spatial-hit${edge.selected ? ' selected' : ''}`}
+      className={`spatial-route spatial-hit${edge.selected ? ' selected' : ''}${flow ? ' flowing' : ''}`}
       data-connection-id={edge.id}
       data-tier={drawn.route.tier}
       data-kind={drawn.route.kind}
@@ -313,7 +330,7 @@ function Tube({
           strokeDasharray={String(dash)}
         />
       )}
-      {edge.selected && (
+      {(edge.selected || flow) && (
         <path d={drawn.path} className="spatial-tube-glow" strokeWidth={width + 9} />
       )}
       {drawn.chevrons.map((chevron, index) => (
@@ -325,6 +342,14 @@ function Tube({
         />
       ))}
       <Polygons polygons={drawn.heads} />
+      {flow && (
+        <FlowParticles
+          d={drawn.path}
+          color={color}
+          playing={flow === 'playing'}
+          radius={Math.max(3.4, width * 0.72)}
+        />
+      )}
     </g>
   );
 }
@@ -373,6 +398,10 @@ export function SpatialView<T extends SpatialNode>({
   const orientationRef = useRef(orientation);
   orientationRef.current = orientation;
   const shadowFilter = `spatial-shadow-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  // Octocat はポインターを向けたときと選択したときだけ反応し、常時は動かさない。
+  const [pointing, setPointing] = useState<string>();
+  const [hop, setHop] = useState<{ id: string; key: number }>();
+  const reducedMotion = usePrefersReducedMotion();
 
   // 選択・ホバーでは形が変わらないので、構造が変わったときだけシーンを作り直す。
   const nodeKey = nodes.map((node) => `${node.id}:${node.data.collapsed ? 1 : 0}`).join('|');
@@ -395,6 +424,12 @@ export function SpatialView<T extends SpatialNode>({
                 resource: node.data.resource,
                 collapsed: node.data.collapsed,
                 iconType: node.data.iconType,
+                emblem: resolveEmblem(
+                  node.data.resource,
+                  node.data.iconType ?? node.data.resource.type,
+                  node.data.collapsed,
+                  getIcon,
+                ),
               })),
             edges.map((edge) => ({
               id: edge.id,
@@ -552,6 +587,7 @@ export function SpatialView<T extends SpatialNode>({
         return { slab, polygons, shadow, outline, tagAnchor, bounds };
       });
 
+    const solidTops = new Map<string, number>();
     const solids = [...scene.solids]
       .map((item) => ({
         item,
@@ -560,13 +596,40 @@ export function SpatialView<T extends SpatialNode>({
       .sort((a, b) => a.depth - b.depth)
       .map(({ item }) => {
         const bounds = emptyBounds();
-        const polygons = drawParts(item.solid.parts, projector, bounds);
+        let logo: { x: number; y: number; size: number; href: string } | undefined;
+        let parts = item.solid.parts;
+        if (item.emblem?.kind === 'aws-logo') {
+          // 板は視点へ向けて作り直し、正面のロゴが画面と平行な正方形になるようにする。
+          const plaque = logoPlaque(
+            item.center.x,
+            item.center.y,
+            item.base,
+            item.size,
+            item.emblem.color,
+            item.emblem.tile,
+            projector.orientation,
+          );
+          parts = plaque.parts;
+          solidTops.set(item.id, item.base + plaque.height);
+          const [topLeft, topRight] = plaque.face.map((point) => projector.project(point));
+          logo = {
+            x: topLeft!.x,
+            y: topLeft!.y,
+            size: topRight!.x - topLeft!.x,
+            href: item.emblem.href,
+          };
+        }
+        const polygons = drawParts(parts, projector, bounds);
+        const activePolygons =
+          item.activeSolid && drawParts(item.activeSolid.parts, projector, bounds);
         const ring = circlePoints(projector, item.center, item.base + 0.6, item.size * 0.72, 28);
         const ground = circlePoints(projector, item.center, item.base, item.size * 0.6, 16);
         const bottom = Math.max(...ground.map((point) => point.y));
         return {
           item,
           polygons,
+          activePolygons,
+          logo,
           ring: polygonPoints(ring),
           shadow: polygonPoints(
             circlePoints(
@@ -585,7 +648,12 @@ export function SpatialView<T extends SpatialNode>({
     const routes = new Map(
       scene.routes.map((route) => [
         route.id,
-        drawRoute(route, projector, edgeColors.get(route.id) ?? '#596579', curved),
+        drawRoute(
+          retargetAirRoute(route, solidTops),
+          projector,
+          edgeColors.get(route.id) ?? '#596579',
+          curved,
+        ),
       ]),
     );
 
@@ -930,21 +998,40 @@ export function SpatialView<T extends SpatialNode>({
               {tubes('surface')}
             </g>
             <g className="spatial-solids">
-              {drawing.solids.map(({ item, polygons, ring, shadow }) => {
+              {drawing.solids.map(({ item, polygons, activePolygons, logo, ring, shadow }) => {
                 const node = nodesById.get(item.id);
                 const appearance = resourceAppearance(item.resource);
+                const active = Boolean(activePolygons && (node?.selected || pointing === item.id));
                 return (
                   <g
                     key={item.id}
                     className={`spatial-solid spatial-hit${node?.selected ? ' selected' : ''}${node?.data.related ? ' related' : ''}${node?.data.muted ? ' muted' : ''}`}
                     data-solid-id={item.id}
                     data-solid-kind={item.kind}
+                    data-emblem={item.emblem?.kind}
+                    data-pose={activePolygons ? (active ? 'wave' : 'rest') : undefined}
                     opacity={node?.data.muted ? 0.32 : appearance.opacity}
-                    onClick={() => onSelectNode(item.id)}
-                    onPointerEnter={() => onHover(item.id)}
-                    onPointerLeave={() => onHover()}
+                    onClick={() => {
+                      if (item.emblem?.kind === 'octocat' && !reducedMotion)
+                        setHop({ id: item.id, key: Date.now() });
+                      onSelectNode(item.id);
+                    }}
+                    onPointerEnter={() => {
+                      setPointing(item.id);
+                      onHover(item.id);
+                    }}
+                    onPointerLeave={() => {
+                      setPointing(undefined);
+                      onHover();
+                    }}
                   >
-                    <title>{`${item.resource.label}（${solidKindLabels[item.kind]}）`}</title>
+                    <title>
+                      {item.emblem?.kind === 'octocat'
+                        ? `${item.resource.label}（GitHub の Octocat）`
+                        : item.emblem?.kind === 'aws-logo'
+                          ? `${item.resource.label}（AWS 公式アイコン・${solidKindLabels[item.kind]}）`
+                          : `${item.resource.label}（${solidKindLabels[item.kind]}）`}
+                    </title>
                     <polygon points={shadow} className="spatial-solid-shadow" />
                     {(node?.selected ||
                       node?.data.related ||
@@ -960,7 +1047,24 @@ export function SpatialView<T extends SpatialNode>({
                         }
                       />
                     )}
-                    <Polygons polygons={polygons} />
+                    <g
+                      key={hop?.id === item.id ? hop.key : undefined}
+                      className={hop?.id === item.id ? 'spatial-hop' : undefined}
+                      onAnimationEnd={() => setHop(undefined)}
+                    >
+                      <Polygons polygons={active ? activePolygons! : polygons} />
+                      {logo && (
+                        <image
+                          className="spatial-logo"
+                          href={logo.href}
+                          x={round(logo.x)}
+                          y={round(logo.y)}
+                          width={round(logo.size)}
+                          height={round(logo.size)}
+                          preserveAspectRatio="xMidYMid meet"
+                        />
+                      )}
+                    </g>
                   </g>
                 );
               })}

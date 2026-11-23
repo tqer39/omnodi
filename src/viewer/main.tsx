@@ -7,6 +7,10 @@ import { ChatPanel } from './ChatPanel';
 import { CvePanel } from './CvePanel';
 import { Magnifier } from './Magnifier';
 import { SpatialView } from './SpatialView';
+import { CreateWizard } from './CreateWizard';
+import { WalkthroughPanel } from './WalkthroughPanel';
+import { FlowParticles, usePrefersReducedMotion } from './FlowParticles';
+import { buildWalkthrough } from '../core/walkthrough';
 import type { SpatialViewControls } from './SpatialViewport';
 import { absolutePlacements, bridgePath } from '../core/geometry';
 import { connectionPath, connectionLabelAnchor } from './connection-path';
@@ -47,6 +51,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './style.css';
+import './guided.css';
 import { parseDSL } from '../core/parser';
 import { validateDiagram } from '../core/validate.js';
 import { serializeDSL } from '../core/serialize';
@@ -528,6 +533,9 @@ function RoutedConnection(props: EdgeProps) {
         markerStart={atStart ? `url(#${markerId})` : undefined}
         style={props.style}
       />
+      {props.data?.flow ? (
+        <FlowParticles d={path} color={color} playing={props.data.flow === 'playing'} />
+      ) : null}
       {labelAnchor && (
         <path
           d={`M ${labelAnchor.x},${labelAnchor.y} L ${labelPosition.x},${labelPosition.y}`}
@@ -616,6 +624,12 @@ function App() {
   const [documentVersion, setDocumentVersion] = useState(0);
   const [source, setSource] = useState(() => (initial ? serializeDSL(initial) : defaultSource));
   const [editorOpen, setEditorOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const wizardOpener = useRef<HTMLButtonElement>(null);
+  const [createdNotice, setCreatedNotice] = useState<string>();
+  // 説明中のステップは接続 ID で追い、図の編集で順番が変わっても同じ接続を指す。
+  const [tour, setTour] = useState<{ id: string; playing: boolean }>();
+  const reducedMotion = usePrefersReducedMotion();
   const [chatOpen, setChatOpen] = useState(false);
   const [cveOpen, setCveOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -1131,13 +1145,31 @@ function App() {
   const selectedConnection = graph?.connections.find(
     (edge) => edge.id === selectedEdge || edge.originalIds.includes(selectedEdge ?? ''),
   );
-  const selectionActive = Boolean(selected || selectedConnection);
+  const walkthrough = useMemo(() => (diagram ? buildWalkthrough(diagram) : []), [diagram]);
+  const tourIndex = tour ? walkthrough.findIndex((step) => step.connectionId === tour.id) : -1;
+  const tourStep = tourIndex >= 0 ? walkthrough[tourIndex] : undefined;
+  // 折りたたみで集約した接続も、元の接続 ID から表示中の線を探す。
+  const tourConnection = tourStep
+    ? graph?.connections.find(
+        (edge) =>
+          edge.id === tourStep.connectionId || edge.originalIds.includes(tourStep.connectionId),
+      )
+    : undefined;
+  const tourEnds = tourStep
+    ? [tourStep.source, tourStep.target].map((id) => graph?.representative[id] ?? id)
+    : [];
+  const highlightedConnection = tourConnection ?? (tourStep ? undefined : selectedConnection);
+  const selectionActive = Boolean(selected || selectedConnection || tourStep);
   const focus = activeId ? (graph?.representative[activeId] ?? activeId) : undefined;
   const related = useMemo(() => {
     const ids = new Set<string>();
-    if (selectedConnection) {
-      ids.add(selectedConnection.source);
-      ids.add(selectedConnection.target);
+    if (highlightedConnection) {
+      ids.add(highlightedConnection.source);
+      ids.add(highlightedConnection.target);
+      return ids;
+    }
+    if (tourEnds.length) {
+      tourEnds.forEach((id) => ids.add(id));
       return ids;
     }
     if (focus) {
@@ -1168,7 +1200,8 @@ function App() {
       });
     }
     return ids;
-  }, [focus, graph, selectedConnection]);
+    // tourEnds は tourStep と graph から決まる。
+  }, [focus, graph, highlightedConnection, tourStep]);
   const renderedNodes = useMemo(
     () =>
       nodes.map((node) => ({
@@ -1199,15 +1232,17 @@ function App() {
         const parallel = edges.filter(
           (other) => other.source === edge.source && other.target === edge.target,
         );
-        const match = selectedConnection
-          ? edge.id === selectedConnection.id
-          : edge.source === focus ||
-            edge.target === focus ||
-            (Boolean(
-              graph?.resources.some((resource) => resource.id === focus && isBoundary(resource)),
-            ) &&
-              related.has(edge.source) &&
-              related.has(edge.target));
+        const match = highlightedConnection
+          ? edge.id === highlightedConnection.id
+          : tourStep
+            ? false
+            : edge.source === focus ||
+              edge.target === focus ||
+              (Boolean(
+                graph?.resources.some((resource) => resource.id === focus && isBoundary(resource)),
+              ) &&
+                related.has(edge.source) &&
+                related.has(edge.target));
         return {
           ...edge,
           selected: edge.id === selectedConnection?.id,
@@ -1238,6 +1273,8 @@ function App() {
                 .map((other) => (other.data?.route as EdgeRoute | undefined)?.points ?? []),
             ),
             onSelect: selectConnection,
+            flow:
+              edge.id === tourConnection?.id ? (tour?.playing ? 'playing' : 'paused') : undefined,
             accessibleLabel: `${graph?.resources.find((resource) => resource.id === edge.source)?.label ?? edge.source} → ${graph?.resources.find((resource) => resource.id === edge.target)?.label ?? edge.target}: ${edge.label}`,
           },
           zIndex: match ? activeEdgeZ : 1,
@@ -1252,7 +1289,10 @@ function App() {
       edges,
       focus,
       related,
-      selectedConnection,
+      highlightedConnection,
+      tourStep,
+      tourConnection,
+      tour?.playing,
       selectConnection,
       graph,
       selectionActive,
@@ -1409,6 +1449,8 @@ function App() {
       }),
     });
     pendingFocus.current = undefined;
+    setTour(undefined);
+    setCreatedNotice(undefined);
     setHovered(undefined);
     setQuery('');
     setDocumentVersion((current) => current + 1);
@@ -1631,6 +1673,7 @@ function App() {
     (direction: 'undo' | 'redo') => {
       const target = direction === 'undo' ? history.past.at(-1) : history.future[0];
       if (!target) return;
+      if (target.documentKey !== history.present.documentKey) setTour(undefined);
       if (target.diagram !== diagram || target.source !== history.present.source) {
         setSource(target.source);
       }
@@ -1647,6 +1690,7 @@ function App() {
       }
       setDocumentVersion((current) => current + 1);
       pendingFocus.current = undefined;
+      setCreatedNotice(undefined);
       setSelected(undefined);
       setSelectedEdge(undefined);
       setHovered(undefined);
@@ -1659,9 +1703,81 @@ function App() {
     },
     [history, diagram, view, scope],
   );
+  const startTour = () => {
+    const first = walkthrough[0];
+    if (!first) return;
+    setCreatedNotice(undefined);
+    // 視差効果を減らす設定では自動で進めず、利用者の操作で進める。
+    setTour({ id: first.connectionId, playing: !reducedMotion });
+  };
+  useEffect(() => {
+    if (reducedMotion) setTour((current) => current && { ...current, playing: false });
+  }, [reducedMotion]);
+  const moveTour = (index: number) => {
+    const step = walkthrough[index];
+    if (step) setTour((current) => current && { ...current, id: step.connectionId });
+  };
+  useEffect(() => {
+    if (tour && tourIndex < 0) setTour(undefined);
+  }, [tour, tourIndex]);
+  useEffect(() => {
+    if (!tour?.playing || tourIndex < 0) return;
+    const timer = setTimeout(() => {
+      const next = walkthrough[tourIndex + 1];
+      setTour(
+        (current) =>
+          current &&
+          (next ? { ...current, id: next.connectionId } : { ...current, playing: false }),
+      );
+    }, 4800);
+    return () => clearTimeout(timer);
+  }, [tour, tourIndex, walkthrough]);
+  useEffect(() => {
+    if (!tour?.playing) return;
+    const pause = () => {
+      if (document.visibilityState === 'hidden')
+        setTour((current) => current && { ...current, playing: false });
+    };
+    document.addEventListener('visibilitychange', pause);
+    return () => document.removeEventListener('visibilitychange', pause);
+  }, [tour?.playing]);
+  const revealTour = () => {
+    if (!tourStep || !diagram) return;
+    // 展開のため詳細範囲を解除しても、利用者のパン・ズームを保持する。
+    autoFitContext.current = { diagram, view, scope: undefined };
+    const ancestors = new Set<string>();
+    for (const id of [tourStep.source, tourStep.target]) {
+      let resource = diagram.resources.find((item) => item.id === id);
+      while (resource?.parentId && !ancestors.has(resource.parentId)) {
+        ancestors.add(resource.parentId);
+        resource = diagram.resources.find((item) => item.id === resource!.parentId);
+      }
+    }
+    dispatchHistory({
+      type: 'commit',
+      update: (current) => ({
+        ...current,
+        scope: undefined,
+        collapsed: current.collapsed.filter((id) => !ancestors.has(id)),
+        expanded: [...new Set([...current.expanded, ...ancestors])],
+      }),
+    });
+  };
+  const showTour = () => {
+    if (!tourConnection) return;
+    const ids = [tourConnection.source, tourConnection.target];
+    if (showSpatialRef.current) spatialControls.current?.fit(ids);
+    else
+      void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.5, maxZoom: 1.2, duration: 450 });
+  };
+  const closeWizard = () => {
+    setWizardOpen(false);
+    requestAnimationFrame(() => wizardOpener.current?.focus());
+  };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
+        wizardOpen ||
         event.defaultPrevented ||
         event.isComposing ||
         event.altKey ||
@@ -1690,7 +1806,7 @@ function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [restoreHistory]);
+  }, [restoreHistory, wizardOpen]);
   return (
     <main className="app-shell" data-action-labels={showActionLabels}>
       <header className="topbar">
@@ -1701,7 +1817,9 @@ function App() {
           <strong>Omnodi</strong>
           <span>構造と流れを、見渡す。</span>
         </div>
-        <div className="document-title">{diagram?.title ?? '構成図'}</div>
+        <div className="document-title" title={diagram?.title ?? '構成図'}>
+          {diagram?.title ?? '構成図'}
+        </div>
         <div className="history-actions" role="group" aria-label="操作履歴">
           <button
             className="toolbar-button"
@@ -1721,6 +1839,19 @@ function App() {
           </button>
         </div>
         <div className="header-actions" role="group" aria-label="ファイル">
+          <button
+            ref={wizardOpener}
+            title="質問に答えて構成図の雛形を作る"
+            className="toolbar-button create-button"
+            aria-haspopup="dialog"
+            aria-expanded={wizardOpen}
+            onClick={() => {
+              setTour((current) => current && { ...current, playing: false });
+              setWizardOpen(true);
+            }}
+          >
+            <ActionLabel icon="create">新しく作る</ActionLabel>
+          </button>
           <button
             title="ファイルを開く"
             className="toolbar-button"
@@ -2383,6 +2514,20 @@ function App() {
             <div className="toolbar-group" role="group" aria-label="接続・囲み">
               <span className="toolbar-group-label">接続・囲み</span>
               <ConnectionHelp visibleKinds={effectiveKinds} onToggle={toggleKind} />
+              {/* 独立した段を増やさず、接続の操作と並べてキャンバスを広く保つ。 */}
+              <button
+                className="toolbar-button walkthrough-toggle"
+                aria-pressed={Boolean(tour)}
+                disabled={!walkthrough.length}
+                title={
+                  walkthrough.length
+                    ? '矢印の順に、処理の流れを説明します'
+                    : '接続がないため説明できません'
+                }
+                onClick={() => (tour ? setTour(undefined) : startTour())}
+              >
+                <ActionLabel icon="play">処理の流れ</ActionLabel>
+              </button>
             </div>
             {scope && (
               <div className="scope-bar">
@@ -2402,6 +2547,52 @@ function App() {
               </div>
             )}
           </div>
+          {createdNotice && (
+            <aside className="created-notice" role="status">
+              <p>{createdNotice}</p>
+              <button className="toolbar-button" onClick={startTour}>
+                <ActionLabel icon="play">処理の流れを再生</ActionLabel>
+              </button>
+              <button
+                className="created-notice-close"
+                aria-label="案内を閉じる"
+                onClick={() => setCreatedNotice(undefined)}
+              >
+                ×
+              </button>
+            </aside>
+          )}
+          {tourStep && (
+            <WalkthroughPanel
+              steps={walkthrough}
+              index={tourIndex}
+              playing={Boolean(tour?.playing)}
+              reducedMotion={reducedMotion}
+              visibility={{
+                visible: Boolean(tourConnection),
+                revealable:
+                  !tourConnection &&
+                  (Boolean(scope) ||
+                    tourEnds.some((id, index) => id !== [tourStep.source, tourStep.target][index])),
+              }}
+              onToggle={() =>
+                setTour((current) => {
+                  if (!current || reducedMotion) return current;
+                  // 最後のステップで再生したときは最初から流す。
+                  if (!current.playing && tourIndex === walkthrough.length - 1)
+                    return { id: walkthrough[0]!.connectionId, playing: true };
+                  return { ...current, playing: !current.playing };
+                })
+              }
+              onMove={moveTour}
+              onEnd={() => {
+                setTour(undefined);
+                canvas.current?.querySelector<HTMLButtonElement>('.walkthrough-toggle')?.focus();
+              }}
+              onReveal={revealTour}
+              onShow={showTour}
+            />
+          )}
           {editLayout && !showSpatial && (
             <aside className="layout-help" role="status">
               カードをドラッグして移動します。移動した配置は固定され、DSLに保存されます。
@@ -2926,6 +3117,25 @@ function App() {
           )}
         </aside>
       </section>
+      {wizardOpen && (
+        <CreateWizard
+          replacing={Boolean(diagram)}
+          blocked={
+            suggestionBlocked
+              ? 'DSL エディターに未反映の変更があります。下書きを守るため作成できません。「解析して反映」するか、下書きを元に戻してから作成してください。'
+              : undefined
+          }
+          onCancel={closeWizard}
+          onCreate={(blueprint) => {
+            acceptDiagram(blueprint.diagram);
+            setShowSpatial(true);
+            setCreatedNotice(
+              `「${blueprint.diagram.title}」を作成しました。確認が必要な事項 ${blueprint.unresolved.length} 件は右側の「確認が必要な情報」で確認できます。`,
+            );
+            closeWizard();
+          }}
+        />
+      )}
       {diagnostics.length > 0 && (
         <div className="diagnostics" role="alert">
           <button aria-label="診断を閉じる" onClick={() => setDiagnostics([])}>

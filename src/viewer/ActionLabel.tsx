@@ -17,6 +17,8 @@ const paths = {
   move: 'M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4m12-8 4 4-4 4',
   unlock: 'M7 11V7a5 5 0 0 1 9-3M5 11h14v10H5V11Zm7 4v3',
   shape: 'M3 19V5h8v14h10M3 19C3 1 21 23 21 5',
+  create: 'M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2',
+  play: 'M4 12h3m3 0h3m3 0h4m-3-3 3 3-3 3M5 5v14',
 } as const;
 
 export function ActionLabel({ icon, children }: { icon: keyof typeof paths; children: ReactNode }) {

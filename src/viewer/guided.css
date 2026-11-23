@@ -1,0 +1,462 @@
+/* 新しく作る・処理の流れの説明。常時は表示せず、操作したときだけ前面に出す。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.topbar .create-button {
+  background: #20796f;
+  border-color: #20796f;
+  color: #fff;
+  font-weight: 600;
+}
+.topbar .create-button:hover {
+  background: #1a655d;
+  border-color: #1a655d;
+  color: #fff;
+}
+
+/* ---- 質問ダイアログ ---- */
+.wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #1b2b3a5c;
+  backdrop-filter: blur(2px);
+}
+.create-wizard {
+  width: min(640px, 100%);
+  max-height: min(86dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #d5e0e6;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px #14263a40;
+  overflow: hidden;
+}
+.wizard-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px 0;
+}
+.wizard-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #20796f;
+}
+.wizard-progress {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+.wizard-progress li {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: #e3eaee;
+}
+.wizard-progress li[data-state='done'] {
+  background: #8cc5bb;
+}
+.wizard-progress li[data-state='current'] {
+  background: #20796f;
+}
+.wizard-close,
+.walkthrough-close,
+.created-notice-close {
+  border: 0;
+  background: transparent;
+  color: #6c7f8e;
+  font-size: 20px;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.wizard-close:hover,
+.walkthrough-close:hover,
+.created-notice-close:hover {
+  background: #eef4f5;
+  color: #26394c;
+}
+.create-wizard h2 {
+  margin: 14px 20px 2px;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  color: #1d3142;
+}
+.create-wizard h2:focus {
+  outline: none;
+}
+.wizard-hint {
+  margin: 2px 20px 0;
+  color: #687d8c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wizard-body {
+  padding: 14px 20px 6px;
+  overflow: auto;
+  min-height: 0;
+}
+.wizard-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  gap: 8px;
+}
+.wizard-choice {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 13px;
+  border: 1px solid #d9e3e9;
+  border-radius: 10px;
+  background: #fbfdfd;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.wizard-choice:hover {
+  border-color: #9fcbc2;
+}
+.wizard-choice:has(input:checked) {
+  border-color: #20796f;
+  background: #eef8f5;
+  box-shadow: inset 0 0 0 1px #20796f;
+}
+.wizard-choice:has(input:focus-visible) {
+  outline: 2px solid #24877f;
+  outline-offset: 2px;
+}
+.wizard-choice input {
+  margin: 2px 0 0;
+  accent-color: #20796f;
+}
+.wizard-choice span {
+  display: grid;
+  gap: 3px;
+}
+.wizard-choice strong {
+  font-size: 13px;
+  color: #1f3546;
+}
+.wizard-choice small {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #617685;
+}
+.wizard-summary {
+  display: grid;
+  gap: 14px;
+}
+.wizard-summary h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #3f5666;
+}
+.wizard-answers {
+  margin: 0;
+  display: grid;
+  border: 1px solid #dfe7ec;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.wizard-answers div {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.wizard-answers div + div {
+  border-top: 1px solid #edf2f5;
+}
+.wizard-answers dt {
+  color: #708492;
+  font-size: 11.5px;
+}
+.wizard-answers dd {
+  margin: 0;
+  font-weight: 600;
+  color: #1f3546;
+}
+.wizard-edit {
+  border: 0;
+  background: transparent;
+  color: #20796f;
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+.wizard-edit:hover {
+  background: #eef8f5;
+}
+.wizard-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wizard-chips li {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f0f4f7;
+  color: #3e5464;
+  font-size: 11.5px;
+}
+.wizard-flow {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: #31495a;
+}
+.wizard-flow li::marker {
+  color: #20796f;
+  font-weight: 700;
+}
+.wizard-summary ul:not(.wizard-chips) {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #485f6f;
+}
+.wizard-unresolved summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #8a5a17;
+}
+.wizard-unresolved ul {
+  margin-top: 6px !important;
+}
+.wizard-notice {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #f3f7f9;
+  color: #536978;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.wizard-blocked {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #e0be84;
+  background: #fff8ee;
+  color: #82561f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #edf2f5;
+}
+.wizard-spacer {
+  flex: 1;
+}
+.wizard-footer .primary-button {
+  padding: 9px 16px;
+  font-weight: 600;
+}
+.wizard-footer .primary-button:disabled {
+  background: #a9c3be;
+  cursor: default;
+}
+
+/* ---- 作成後の案内 ---- */
+.created-notice {
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(680px, calc(100% - 40px));
+  padding: 9px 9px 9px 15px;
+  border: 1px solid #9bc9bd;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px #1d3a3626;
+  font-size: 12px;
+  color: #24463f;
+}
+.created-notice p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ---- 処理の流れの説明 ---- */
+.walkthrough-panel {
+  position: absolute;
+  z-index: 12;
+  right: 14px;
+  bottom: 132px;
+  width: min(360px, calc(100% - 28px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  padding: 13px 14px 12px;
+  border: 1px solid #c4d8d3;
+  border-radius: 12px;
+  background: #fffffff5;
+  box-shadow: 0 12px 32px #1d3a3630;
+}
+.walkthrough-panel:focus {
+  outline: none;
+}
+.walkthrough-panel:focus-visible {
+  outline: 2px solid #24877f;
+  outline-offset: 2px;
+}
+.walkthrough-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.walkthrough-header div {
+  display: grid;
+  flex: 1;
+}
+.walkthrough-header strong {
+  font-size: 13px;
+}
+.walkthrough-header span {
+  font-size: 11px;
+  color: #6f8290;
+  font-variant-numeric: tabular-nums;
+}
+.walkthrough-badge {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #20796f;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 13px !important;
+}
+.walkthrough-track {
+  height: 3px;
+  border-radius: 2px;
+  background: #e5ecef;
+  overflow: hidden;
+}
+.walkthrough-track span {
+  display: block;
+  height: 100%;
+  background: #20796f;
+  transition: width 0.3s;
+}
+.walkthrough-body h3 {
+  margin: 2px 0 4px;
+  font-size: 15px;
+  color: #1d3142;
+}
+.walkthrough-route {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #20796f;
+}
+.walkthrough-route[data-basis='inferred'] {
+  color: #7a6a3b;
+}
+.walkthrough-description {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #3b5162;
+}
+.walkthrough-hidden {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff8ee;
+  color: #82561f;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.walkthrough-hidden .toolbar-button {
+  justify-self: start;
+  padding: 4px 9px;
+}
+.walkthrough-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.walkthrough-controls .toolbar-button {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.walkthrough-play {
+  min-width: 96px;
+  font-weight: 600;
+}
+.walkthrough-play[aria-pressed='true'] {
+  background: #20796f;
+  border-color: #20796f;
+  color: #fff;
+}
+.walkthrough-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #6f8290;
+}
+.walkthrough-jump select {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+}
+.walkthrough-basis {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: #7a8c99;
+}
+
+/* 粒子は矢印の色の縁取りで、どの線を流れているか分かるようにする。 */
+.flow-particles {
+  pointer-events: none;
+}
+.flow-particles circle {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+.flow-particles circle:first-of-type {
+  fill: currentColor;
+  stroke: #fff;
+}
