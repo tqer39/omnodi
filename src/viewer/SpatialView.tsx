@@ -18,6 +18,8 @@ import type { Connection, LayoutResult, Resource } from '../core/model';
 import {
   SpatialViewport,
   type SpatialBounds,
+  type SpatialBoundsScope,
+  type SpatialElementScope,
   type SpatialViewControls,
   type SpatialViewportControls,
 } from './SpatialViewport';
@@ -393,7 +395,10 @@ export function SpatialView<T extends SpatialNode>({
   renderNode: (node: T) => ReactNode;
 }) {
   const viewport = useRef<SpatialViewportControls>(null);
-  useImperativeHandle(ref, () => ({ fit: (ids) => viewport.current?.fit(ids) }));
+  useImperativeHandle(ref, () => ({
+    fit: (ids) => viewport.current?.fit(ids),
+    showInitial: () => viewport.current?.showInitial(),
+  }));
   const [orientation, setOrientation] = useState<Orientation>(defaultOrientation);
   const orientationRef = useRef(orientation);
   orientationRef.current = orientation;
@@ -760,7 +765,10 @@ export function SpatialView<T extends SpatialNode>({
     // edges のラベル文字列は edgeKey と同じ更新契機で変わる。
   }, [drawing, scene, edgeKey, labelSizes]);
 
-  const getBounds = (ids?: string[]): SpatialBounds | undefined => {
+  const getBounds = (
+    ids?: string[],
+    scope: SpatialBoundsScope = 'all',
+  ): SpatialBounds | undefined => {
     if (!drawing || !labels) return undefined;
     const bounds = emptyBounds();
     const wanted = ids && new Set(ids);
@@ -776,7 +784,7 @@ export function SpatialView<T extends SpatialNode>({
       const tag = labels.tags.get(slab.id);
       if (tag) includeBox(bounds, tag.box);
     }
-    if (!wanted) {
+    if (!wanted && scope === 'all') {
       for (const drawn of drawing.routes.values()) includeBox(bounds, boundsBox(drawn.bounds));
       for (const { box } of labels.edgeLabels.values()) includeBox(bounds, box);
       for (const { box } of labels.fenceLabels.values()) includeBox(bounds, box);
@@ -790,6 +798,38 @@ export function SpatialView<T extends SpatialNode>({
         });
     }
     return Number.isFinite(bounds.left) ? bounds : undefined;
+  };
+
+  const getElements = (scope: SpatialElementScope): SpatialBounds[] => {
+    if (!drawing || !labels) return [];
+    let solids = drawing.solids;
+    if (scope === 'focus') {
+      // 利用者の要求が流れる経路（入口・処理・保存先）を初期表示の注目領域にする。
+      // 上空の配備・認証や監視信号は遠くに置かれやすく、含めると主要部分が小さくなる。
+      // 境界の外にいる利用者などは離れて置かれるため、境界の中の端点があればそちらを優先する。
+      const ends = new Set(
+        [...drawing.routes.values()].flatMap(({ route }) =>
+          route.tier === 'under' && !route.telemetry ? [route.source, route.target] : [],
+        ),
+      );
+      const linked = solids.filter(({ item }) => ends.has(item.id));
+      const inside = linked.filter(({ item }) => item.base > 0);
+      solids = inside.length ? inside : linked;
+    }
+    const elements = solids.map(({ item, bounds: shape }) => {
+      const bounds = emptyBounds();
+      includeBox(bounds, boundsBox(shape));
+      const caption = labels.captions.get(item.id);
+      if (caption) includeBox(bounds, caption.box);
+      return bounds;
+    });
+    if (scope === 'all')
+      for (const { box } of labels.tags.values()) {
+        const bounds = emptyBounds();
+        includeBox(bounds, box);
+        elements.push(bounds);
+      }
+    return elements;
   };
 
   const rotate = (yaw: number, pitch: number) => {
@@ -839,6 +879,7 @@ export function SpatialView<T extends SpatialNode>({
         ),
       )}
       getBounds={getBounds}
+      getElements={getElements}
       onClear={onClear}
       onRotate={(dx, dy) => rotate(dx * 0.35, dy * 0.3)}
       ref={viewport}

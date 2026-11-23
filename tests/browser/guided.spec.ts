@@ -264,6 +264,8 @@ for (const offline of [false, true])
     expect(await api.locator('polygon').count()).toBeGreaterThan(8);
 
     const repository = map.locator('.spatial-solid[data-solid-id="repository"]');
+    // 初期表示は通信経路を優先するため、配備側のキャラクターは全体表示で操作する。
+    await map.getByRole('button', { name: '3D マップを全体表示' }).click();
     await expect(repository).toHaveAttribute('data-emblem', 'octocat');
     await expect(repository.locator('title')).toHaveText('tqer39/example（GitHub の Octocat）');
     await expect(map.locator('.spatial-caption[data-resource-id="repository"]')).toContainText(

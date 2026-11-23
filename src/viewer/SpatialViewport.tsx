@@ -7,11 +7,30 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import {
+  fitCamera,
+  initialCamera,
+  overviewCamera,
+  type Camera,
+  type CameraBounds,
+} from './spatial-camera';
 
 type Point = { x: number; y: number };
-type Camera = Point & { zoom: number };
-export type SpatialBounds = { left: number; right: number; top: number; bottom: number };
-export type SpatialViewControls = { fit: (ids?: string[]) => void };
+export type SpatialBounds = CameraBounds;
+/** structure は境界・立体・名札だけ。配管・接続ラベル・囲み・注記を除く。 */
+export type SpatialBoundsScope = 'all' | 'structure';
+/**
+ * 初期表示で寄せる先の候補。focus は床下の通信・複製・切替（監視信号を除く）で
+ * つながる立体と名札、all はすべての立体と名札、境界の見出しを1つずつ返す。
+ */
+export type SpatialElementScope = 'focus' | 'all';
+export type SpatialViewControls = {
+  /** ids を指定すると対象へ寄せ、省略すると配管や注記まで含めた全体を表示する。 */
+  fit: (ids?: string[]) => void;
+  /** 図を開いたときの表示。名札を読める大きさを優先する。 */
+  showInitial: () => void;
+};
+type FitRequest = { ids?: string[]; initial?: boolean };
 export type SpatialViewportControls = SpatialViewControls & {
   /** 投影の回転で動いた分だけカメラを戻し、注目点を画面上に留める。 */
   shift: (dx: number, dy: number) => void;
@@ -21,6 +40,7 @@ export function SpatialViewport({
   active,
   ready,
   getBounds,
+  getElements,
   onClear,
   onRotate,
   controls,
@@ -31,7 +51,8 @@ export function SpatialViewport({
   aside?: ReactNode;
   active: boolean;
   ready: boolean;
-  getBounds: (ids?: string[]) => SpatialBounds | undefined;
+  getBounds: (ids?: string[], scope?: SpatialBoundsScope) => SpatialBounds | undefined;
+  getElements: (scope: SpatialElementScope) => SpatialBounds[];
   onClear: () => void;
   /** Shift キーか右ボタンでのドラッグ量（画面ピクセル）。 */
   onRotate: (dx: number, dy: number) => void;
@@ -41,7 +62,8 @@ export function SpatialViewport({
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
-  const pendingFit = useRef<{ ids?: string[] } | undefined>({});
+  // 初めて 3D を開いたときも、図を開いたときと同じ読める大きさで表示する。
+  const pendingFit = useRef<FitRequest | undefined>({ initial: true });
   const drag = useRef<{
     id: number;
     start: Point;
@@ -70,31 +92,33 @@ export function SpatialViewport({
     },
     [active],
   );
-  const fit = (ids?: string[]) => {
+  const fit = (request: FitRequest) => {
     const element = viewport.current;
     if (!element?.clientWidth || !element.clientHeight || !ready) {
-      pendingFit.current = { ids };
+      pendingFit.current = request;
       return;
     }
     pendingFit.current = undefined;
+    const { ids, initial } = request;
     const bounds = getBounds(ids);
     if (!bounds) return;
-    const { left, right, top, bottom } = bounds;
-    const width = element.clientWidth;
-    const height = element.clientHeight;
-    const zoom = Math.min(
-      (width * (ids ? 0.7 : 0.9)) / Math.max(1, right - left),
-      (height * (ids ? 0.7 : 0.88)) / Math.max(1, bottom - top),
-      1.2,
-    );
-    setCamera({
-      x: (width - (left + right) * zoom) / 2,
-      y: (height - (top + bottom) * zoom) / 2,
-      zoom,
-    });
+    const size = { width: element.clientWidth, height: element.clientHeight };
+    if (ids) setCamera(fitCamera(bounds, size, { x: 0.7, y: 0.7 }));
+    else if (initial)
+      setCamera(
+        initialCamera(
+          bounds,
+          getBounds(undefined, 'structure') ?? bounds,
+          size,
+          getElements('focus'),
+          getElements('all'),
+        ),
+      );
+    else setCamera(overviewCamera(bounds, size));
   };
   useImperativeHandle(ref, () => ({
-    fit,
+    fit: (ids) => fit({ ids }),
+    showInitial: () => fit({ initial: true }),
     shift: (dx, dy) =>
       setCamera((current) => ({
         ...current,
@@ -104,7 +128,7 @@ export function SpatialViewport({
   }));
   useLayoutEffect(() => {
     if (!active || !pendingFit.current) return;
-    fit(pendingFit.current.ids);
+    fit(pendingFit.current);
   });
 
   const changeZoom = (factor: number, point: Point) => {
@@ -247,7 +271,12 @@ export function SpatialViewport({
         <button type="button" aria-label="3D マップを縮小" onClick={() => zoomAtCenter(0.8)}>
           −
         </button>
-        <button type="button" aria-label="3D マップを全体表示" onClick={() => fit()}>
+        <button
+          type="button"
+          aria-label="3D マップを全体表示"
+          title="配管や注記まで含めて全体を表示"
+          onClick={() => fit({})}
+        >
           全体
         </button>
         {controls}
