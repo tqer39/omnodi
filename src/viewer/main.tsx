@@ -1132,7 +1132,9 @@ function App() {
     const frame = requestAnimationFrame(() => {
       autoFitContext.current = context;
       void fitView({ padding: lastLayout?.compact ? 0.06 : 0.14, duration: 250 });
-      spatialControls.current?.fit();
+      // 3D は全体を収めると名札が読めないほど縮むため、読める大きさを優先する。
+      // 配管や注記まで含めた全体は「全体」ボタンで表示する。
+      spatialControls.current?.showInitial();
     });
     return () => cancelAnimationFrame(frame);
   }, [graph, flow]);

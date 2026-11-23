@@ -5,6 +5,12 @@ import { createProjector, dedupe, tubePath, type V3 } from '../src/viewer/spatia
 import { buildScene, tierDepths } from '../src/viewer/spatial-scene.js';
 import { buildSolid, diamondTip, solidKind, solidKinds } from '../src/viewer/spatial-solids.js';
 import { placeSpatialLabel } from '../src/viewer/spatial-labels.js';
+import {
+  focusMinZoom,
+  initialCamera,
+  overviewCamera,
+  readableZoom,
+} from '../src/viewer/spatial-camera.js';
 import { nodeShape } from '../src/core/notation.js';
 
 const resource = (id: string, type: string, attributes: Resource['attributes'] = {}): Resource => ({
@@ -224,6 +230,153 @@ describe('3D シーン', () => {
     assert.ok(Math.min(...z) > solid('ci').base);
     assert.ok(Math.max(...z) < solid('ci').top);
   });
+});
+
+describe('3D の初期表示と全体表示', () => {
+  type Bounds = { left: number; right: number; top: number; bottom: number };
+  const box = (left: number, top: number, width: number, height: number): Bounds => ({
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+  });
+  const onScreen = (camera: ReturnType<typeof initialCamera>, bounds: Bounds) => ({
+    left: bounds.left * camera.zoom + camera.x,
+    right: bounds.right * camera.zoom + camera.x,
+    top: bounds.top * camera.zoom + camera.y,
+    bottom: bounds.bottom * camera.zoom + camera.y,
+  });
+  const laptop = { width: 1100, height: 700 };
+  const inside = (shown: Bounds, size: { width: number; height: number }) =>
+    shown.left >= 0 && shown.right <= size.width && shown.top >= 0 && shown.bottom <= size.height;
+
+  it('全体が読める大きさで収まる図は、初期表示も全体表示と同じにする', () => {
+    const all = box(-300, -200, 700, 450);
+    const structure = box(-260, -180, 600, 400);
+    assert.deepEqual(initialCamera(all, structure, laptop), overviewCamera(all, laptop));
+    assert.ok(overviewCamera(all, laptop).zoom >= readableZoom);
+  });
+
+  it('配管や注記で全体が広がっても、境界と名札を読める大きさで収める', () => {
+    // 上空の配管と遠い注記で全体は広いが、境界・立体・名札は画面に収まる。
+    const all = box(-900, -700, 1900, 1200);
+    const structure = box(-400, -250, 1000, 600);
+    const overview = overviewCamera(all, laptop);
+    const initial = initialCamera(all, structure, laptop);
+    assert.ok(overview.zoom < readableZoom);
+    assert.ok(initial.zoom >= readableZoom);
+    const shown = onScreen(initial, structure);
+    assert.ok(shown.left >= 0 && shown.right <= laptop.width);
+    assert.ok(shown.top >= 0 && shown.bottom <= laptop.height);
+  });
+
+  it('通信経路が構造全体に広がる図で、初期表示を縮小して一部だけ切り取らない', () => {
+    const structure = box(0, 0, 1200, 920);
+    const all = box(-100, -100, 1400, 1120);
+    for (const ends of [
+      [box(0, 0, 100, 100), box(1100, 820, 100, 100)],
+      [box(40, 40, 100, 100), box(1060, 780, 100, 100)],
+    ]) {
+      const initial = initialCamera(all, structure, laptop, ends);
+      assert.ok(initial.zoom >= focusMinZoom);
+      assert.ok(initial.zoom > overviewCamera(all, laptop).zoom);
+      assert.ok(inside(onScreen(initial, structure), laptop));
+      for (const end of ends) assert.ok(inside(onScreen(initial, end), laptop));
+    }
+  });
+
+  for (const [name, size] of [
+    ['ノート PC', laptop],
+    ['デスクトップ', { width: 1440, height: 900 }],
+  ] as const)
+    it(`${name}では、左上から遠い主要な通信経路を画面の中央に大きく収める`, () => {
+      // AWS API の例と同じく、左に見出し、右寄りに ALB・ECS・RDS、さらに遠くに配備経路がある。
+      const structure = box(0, 0, 3600, 1800);
+      const all = box(-100, -300, 3900, 2300);
+      const ends = [box(1400, 560, 220, 300), box(1740, 500, 220, 300), box(2080, 540, 220, 320)];
+      const focus = box(1400, 500, 900, 360);
+      const initial = initialCamera(all, structure, size, ends);
+      assert.ok(initial.zoom > overviewCamera(all, size).zoom);
+      const shown = onScreen(initial, focus);
+      assert.ok(shown.left >= 0 && shown.right <= size.width);
+      assert.ok(shown.top >= 0 && shown.bottom <= size.height);
+      const middle = { x: (shown.left + shown.right) / 2, y: (shown.top + shown.bottom) / 2 };
+      assert.ok(Math.abs(middle.x - size.width / 2) < 1);
+      assert.ok(Math.abs(middle.y - size.height / 2) < 1);
+    });
+
+  it('主要な通信経路の端点が広く離れた図でも、文字が潰れない倍率で実際の端点を中央に表示する', () => {
+    const structure = box(0, 0, 9000, 5000);
+    const all = box(-100, -300, 9300, 5600);
+    // 外接矩形 (1000, 1000)〜(6020, 2200) の中央は空白になる。
+    const ends = [box(1000, 1000, 220, 140), box(5800, 2060, 220, 140)];
+    const initial = initialCamera(all, structure, laptop, ends);
+    assert.equal(initial.zoom, focusMinZoom);
+    const visible = ends.map((item) => onScreen(initial, item)).filter((s) => inside(s, laptop));
+    assert.ok(visible.length >= 1);
+    const shown = visible[0]!;
+    assert.ok(Math.abs((shown.left + shown.right) / 2 - laptop.width / 2) < 1);
+    assert.ok(Math.abs((shown.top + shown.bottom) / 2 - laptop.height / 2) < 1);
+  });
+
+  it('端点が3つ以上広く離れた図では、主要部分の中央に最も近い端点を中央に置く', () => {
+    const structure = box(0, 0, 9000, 5000);
+    const all = box(-100, -300, 9300, 5600);
+    const middle = box(3300, 1500, 220, 140);
+    const ends = [box(400, 400, 220, 140), middle, box(6400, 2800, 220, 140)];
+    const shown = onScreen(initialCamera(all, structure, laptop, ends), middle);
+    assert.ok(inside(shown, laptop));
+    assert.ok(Math.abs((shown.left + shown.right) / 2 - laptop.width / 2) < 1);
+    assert.ok(Math.abs((shown.top + shown.bottom) / 2 - laptop.height / 2) < 1);
+  });
+
+  for (const [name, size] of [
+    ['大規模図', laptop],
+    ['小画面', { width: 360, height: 560 }],
+  ] as const) {
+    const structure = box(120, -80, 5200, 3400);
+    const all = box(60, -260, 5400, 3800);
+    it(`通信経路がない${name}では読める倍率を保ち、境界の見出しがある左上を画面に残す`, () => {
+      const heading = box(120, -80, 260, 60);
+      const items = [heading, box(2600, 1500, 200, 160), box(5000, 3100, 200, 160)];
+      const initial = initialCamera(all, structure, size, [], items);
+      assert.equal(initial.zoom, readableZoom);
+      const shown = onScreen(initial, structure);
+      assert.ok(shown.left > 0 && shown.left < size.width * 0.1);
+      assert.ok(shown.top > 0 && shown.top < size.height * 0.1);
+      assert.ok(inside(onScreen(initial, heading), size));
+    });
+    it(`通信経路がない${name}で外接矩形の左上が空白でも、左上に最も近い要素を表示する`, () => {
+      // 投影した UML などは菱形に広がり、外接矩形の左上には何もない。
+      const first = box(120, 1500, 200, 160);
+      const items = [box(2600, -80, 240, 160), first, box(5120, 1600, 200, 160)];
+      const initial = initialCamera(all, structure, size, [], items);
+      assert.equal(initial.zoom, readableZoom);
+      assert.ok(inside(onScreen(initial, first), size));
+      // 外接矩形の左上の空白は画面の外へ出す。
+      assert.ok(onScreen(initial, structure).top < 0);
+    });
+  }
+
+  it('通信経路がない図で右下の要素が左上に最も近くても、図の端より先の空白へ寄せない', () => {
+    const structure = box(0, 0, 3000, 2000);
+    const all = box(-60, -60, 3120, 2120);
+    const last = box(2800, 1840, 200, 160);
+    const initial = initialCamera(all, structure, laptop, [], [last]);
+    const shown = onScreen(initial, structure);
+    assert.ok(inside(onScreen(initial, last), laptop));
+    assert.ok(Math.abs(shown.right - laptop.width * 0.97) < 1);
+    assert.ok(Math.abs(shown.bottom - laptop.height * 0.96) < 1);
+  });
+
+  for (const [name, size] of [
+    ['大規模図', laptop],
+    ['小画面', { width: 360, height: 560 }],
+  ] as const)
+    it(`${name}の全体表示は、縮小してもすべてを収める`, () => {
+      const all = box(60, -260, 5400, 3800);
+      assert.ok(inside(onScreen(overviewCamera(all, size), all), size));
+    });
 });
 
 describe('3D のラベル配置', () => {

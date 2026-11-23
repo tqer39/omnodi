@@ -15,6 +15,93 @@ async function createApi(page: Page) {
   await expect(page.getByRole('region', { name: '3D 構成図' })).toBeVisible();
 }
 
+test('作成直後の 3D は ALB・ECS・RDS を大きく収め、全体ボタンで全体を収める', async ({ page }) => {
+  await createApi(page);
+  const map = page.getByRole('region', { name: '3D 構成図' });
+  const world = map.locator('.spatial-world');
+  const scale = () =>
+    world.evaluate(async (element) => {
+      for (let frame = 0; frame < 10; frame++) await new Promise(requestAnimationFrame);
+      return new DOMMatrix(getComputedStyle(element).transform).a;
+    });
+  const initial = await scale();
+  const bounds = (await map.boundingBox())!;
+  // API の入口（ALB）・API（ECS）・業務データ（RDS）の立体と名札が、すべて地図の中にある。
+  const core = { entry: 'loadBalancer', app: 'container', database: 'database' };
+  for (const [id, kind] of Object.entries(core)) {
+    const caption = map.locator(`.spatial-caption[data-resource-id="${id}"]`);
+    await expect(caption).toHaveAttribute('data-solid-kind', kind);
+    for (const item of [caption, map.locator(`.spatial-solid[data-solid-id="${id}"]`)]) {
+      const box = (await item.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.y).toBeGreaterThanOrEqual(bounds.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    }
+  }
+  // 主要部分は左上に寄せず、地図の中央付近に置く。
+  const centers = await Promise.all(
+    Object.keys(core).map(async (id) => {
+      const box = (await map.locator(`.spatial-solid[data-solid-id="${id}"]`).boundingBox())!;
+      return box.x + box.width / 2;
+    }),
+  );
+  const middle = (Math.min(...centers) + Math.max(...centers)) / 2;
+  expect(Math.abs(middle - (bounds.x + bounds.width / 2))).toBeLessThan(bounds.width * 0.2);
+  // 名札の名前（13px）が潰れない大きさを保つ。
+  const name = map.locator('.spatial-caption[data-resource-id="app"] .resource-text strong');
+  expect((await name.boundingBox())!.height).toBeGreaterThanOrEqual(8);
+
+  await map.getByRole('button', { name: '3D マップを全体表示' }).click();
+  const overview = await scale();
+  // 初期表示は全体表示より本当に大きい（同じ倍率への後退を許さない）。
+  expect(overview).toBeLessThan(initial);
+  for (const item of await map
+    .locator('.spatial-caption, .spatial-header, .spatial-edge-label')
+    .all()) {
+    const box = (await item.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(bounds.x - 1);
+    expect(box.y).toBeGreaterThanOrEqual(bounds.y - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height + 1);
+  }
+});
+
+test('通信経路のない大きな図でも、3D の初期表示に実際の立体と名札を表示する', async ({ page }) => {
+  await page.goto(`http://127.0.0.1:${process.env.INFRA_TEST_PORT ?? '5188'}`);
+  const resources = Array.from(
+    { length: 120 },
+    (_, index) => `  aws.ec2 server_${index} "サーバー ${index}"`,
+  ).join('\n');
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'many.infra',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(`diagram "通信経路のない大きな図" version=1 {\n${resources}\n}`),
+  });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  const map = page.getByRole('region', { name: '3D 構成図' });
+  const scale = await map.locator('.spatial-world').evaluate(async (element) => {
+    for (let frame = 0; frame < 10; frame++) await new Promise(requestAnimationFrame);
+    return new DOMMatrix(getComputedStyle(element).transform).a;
+  });
+  // 全体を縮小せず、名札を読める倍率で表示する。
+  expect(scale).toBeCloseTo(0.9, 5);
+  const bounds = (await map.boundingBox())!;
+  const shown = [];
+  for (const caption of await map.locator('.spatial-caption').all()) {
+    const box = await caption.boundingBox();
+    if (
+      box &&
+      box.x >= bounds.x &&
+      box.y >= bounds.y &&
+      box.x + box.width <= bounds.x + bounds.width &&
+      box.y + box.height <= bounds.y + bounds.height
+    )
+      shown.push(box);
+  }
+  expect(shown.length).toBeGreaterThan(0);
+});
+
 test('質問中はフォーカスと履歴操作を質問画面に留める', async ({ page }) => {
   await createApi(page);
   const title = page.locator('.document-title');
