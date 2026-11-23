@@ -810,6 +810,356 @@ export function diamondTip(
   return { faces };
 }
 
+/** 製品ロゴやキャラクターで、機能の立体より具体的にサービスを示す表現。 */
+export type SolidEmblem =
+  | { kind: 'aws-logo'; href: string; color: string; tile: boolean }
+  | { kind: 'octocat' };
+
+const pedestalPart = (cx: number, cy: number, z: number, s: number): SolidPart => ({
+  ...prism(cx, cy, z, 3, s * 0.6, s * 0.56, 8, '#d9e2e6', {
+    top: '#eef3f4',
+    rotation: Math.PI / 8,
+  }),
+  ground: true,
+});
+
+const add3 = (...vectors: V3[]): V3 => [
+  vectors.reduce((sum, vector) => sum + vector[0], 0),
+  vectors.reduce((sum, vector) => sum + vector[1], 0),
+  vectors.reduce((sum, vector) => sum + vector[2], 0),
+];
+const scale3 = (vector: V3, amount: number): V3 => [
+  vector[0] * amount,
+  vector[1] * amount,
+  vector[2] * amount,
+];
+const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross3 = (a: V3, b: V3): V3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const centroid = (points: V3[]) => scale3(add3(...points), 1 / points.length);
+/** 頂点順にかかわらず、立体の中心から外へ向く法線を持つ面にする。 */
+const outwardFace = (points: V3[], center: V3, color: string): SolidFace => {
+  const normal = cross3(
+    add3(points[1]!, scale3(points[0]!, -1)),
+    add3(points[points.length - 1]!, scale3(points[0]!, -1)),
+  );
+  const outward = add3(centroid(points), scale3(center, -1));
+  return { points, normal: dot3(normal, outward) < 0 ? scale3(normal, -1) : normal, color };
+};
+
+/** 任意の向きの楕円体。法線は楕円体の勾配で求め、潰れた形でも陰影を正しくする。 */
+function ellipsoid(
+  center: V3,
+  axes: [V3, V3, V3],
+  radii: [number, number, number],
+  color: string,
+  alt = color,
+  lat = 6,
+  lon = 12,
+): SolidPart {
+  const at = (i: number, j: number) => {
+    const theta = (i / lat) * Math.PI;
+    const phi = (j / lon) * Math.PI * 2;
+    const local: V3 = [
+      Math.sin(theta) * Math.cos(phi),
+      Math.sin(theta) * Math.sin(phi),
+      Math.cos(theta),
+    ];
+    return {
+      point: add3(
+        center,
+        scale3(axes[0], local[0] * radii[0]),
+        scale3(axes[1], local[1] * radii[1]),
+        scale3(axes[2], local[2] * radii[2]),
+      ),
+      normal: add3(
+        scale3(axes[0], local[0] / radii[0]),
+        scale3(axes[1], local[1] / radii[1]),
+        scale3(axes[2], local[2] / radii[2]),
+      ),
+    };
+  };
+  const faces: SolidFace[] = [];
+  for (let i = 0; i < lat; i++)
+    for (let j = 0; j < lon; j++)
+      faces.push({
+        points: [at(i, j).point, at(i + 1, j).point, at(i + 1, j + 1).point, at(i, j + 1).point],
+        normal: at(i + 0.5, j + 0.5).normal,
+        color: i < lat / 2 ? color : alt,
+      });
+  return { faces };
+}
+
+/** 中心線に沿って細くなる管。区間ごとに部品を分け、胴体との前後関係を区間単位で決める。 */
+function taperedTube(points: V3[], radii: number[], color: string): SolidPart[] {
+  const sides = 6;
+  const frames = points.map((point, index) => {
+    const before = points[Math.max(0, index - 1)]!;
+    const after = points[Math.min(points.length - 1, index + 1)]!;
+    const tangent = add3(after, scale3(before, -1));
+    const helper: V3 = Math.abs(tangent[2]) > 0.9 * Math.hypot(...tangent) ? [1, 0, 0] : [0, 0, 1];
+    const u = cross3(tangent, helper);
+    const ul = Math.hypot(...u) || 1;
+    const e1 = scale3(u, 1 / ul);
+    const v = cross3(tangent, e1);
+    const e2 = scale3(v, 1 / (Math.hypot(...v) || 1));
+    return Array.from({ length: sides }, (_, side) => {
+      const angle = (side / sides) * Math.PI * 2;
+      const offset = add3(
+        scale3(e1, Math.cos(angle) * radii[index]!),
+        scale3(e2, Math.sin(angle) * radii[index]!),
+      );
+      return { point: add3(point, offset), normal: offset };
+    });
+  });
+  const parts: SolidPart[] = [];
+  for (let index = 0; index < points.length - 1; index++) {
+    const faces: SolidFace[] = [];
+    for (let side = 0; side < sides; side++) {
+      const next = (side + 1) % sides;
+      const a = frames[index]![side]!;
+      const b = frames[index]![next]!;
+      const c = frames[index + 1]![next]!;
+      const d = frames[index + 1]![side]!;
+      faces.push({
+        points: [a.point, b.point, c.point, d.point],
+        normal: add3(a.normal, b.normal, c.normal, d.normal),
+        color,
+      });
+    }
+    if (index === points.length - 2)
+      faces.push(
+        outwardFace(
+          frames[index + 1]!.map((item) => item.point),
+          points[index]!,
+          color,
+        ),
+      );
+    parts.push({ faces });
+  }
+  return parts;
+}
+
+// 既定の視点（yaw -32°）から見て顔が正面に来る向き。回転すると横顔・背中も見える。
+const octocatForward: V3 = [Math.sin((-32 * Math.PI) / 180), Math.cos((-32 * Math.PI) / 180), 0];
+const octocatRight: V3 = [octocatForward[1], -octocatForward[0], 0];
+const up: V3 = [0, 0, 1];
+export const octocatColors = {
+  body: '#3b434e',
+  face: '#f2cfae',
+  ear: '#e8a3a7',
+  eye: '#1f2328',
+} as const;
+
+/**
+ * GitHub を表す Octocat の立体。猫耳・頭・顔・胴・5本の触手をコードで組み立てる。
+ * wave は選択・ホバー時のポーズで、右手前の触手を持ち上げて手を振る。
+ */
+export function buildOctocat(
+  cx: number,
+  cy: number,
+  z: number,
+  size: number,
+  pose: 'rest' | 'wave' = 'rest',
+): Solid {
+  const s = size;
+  const z1 = z + 3;
+  const local = (u: number, v: number, w: number): V3 =>
+    add3([cx, cy, z1], scale3(octocatRight, u * s), scale3(octocatForward, v * s), [0, 0, w * s]);
+  const frame: [V3, V3, V3] = [octocatRight, octocatForward, up];
+  const parts: SolidPart[] = [pedestalPart(cx, cy, z, s)];
+  // 触手: 胴の下から放射状に床へ伸び、先端を外へ巻き上げる。
+  const angles = [-112, -56, 0, 56, 112];
+  angles.forEach((degrees, index) => {
+    // 手を振るのは右手前の触手。顔の横へ持ち上げ、既定の視点から見えるようにする。
+    const waving = pose === 'wave' && index === 3;
+    const angle = ((waving ? 70 : degrees) * Math.PI) / 180;
+    const at = (radius: number, height: number, curl = 0) =>
+      local(
+        Math.sin(angle) * radius + Math.cos(angle) * curl,
+        Math.cos(angle) * radius - Math.sin(angle) * curl,
+        height,
+      );
+    const path = waving
+      ? [at(0.12, 0.3), at(0.26, 0.36), at(0.36, 0.47), at(0.4, 0.61), at(0.37, 0.73, -0.04)]
+      : [
+          at(0.08, 0.24),
+          at(0.19, 0.11),
+          at(0.29, 0.05),
+          at(0.38, 0.06, 0.02),
+          at(0.42, 0.13, 0.05),
+        ];
+    parts.push(
+      ...taperedTube(
+        path,
+        [0.075, 0.065, 0.055, 0.042, 0.026].map((r) => r * s),
+        octocatColors.body,
+      ),
+    );
+  });
+  // 胴・頭・耳
+  parts.push(
+    ellipsoid(local(0, 0, 0.34), frame, [0.2 * s, 0.17 * s, 0.17 * s], octocatColors.body),
+    ellipsoid(local(0, 0.01, 0.63), frame, [0.31 * s, 0.25 * s, 0.22 * s], octocatColors.body),
+  );
+  for (const side of [-1, 1]) {
+    const base = [
+      local(side * 0.1, 0.06, 0.74),
+      local(side * 0.27, 0.06, 0.74),
+      local(side * 0.27, -0.08, 0.7),
+      local(side * 0.1, -0.08, 0.72),
+    ];
+    const apex = local(side * 0.25, -0.01, 0.98);
+    const center = local(side * 0.19, -0.01, 0.8);
+    parts.push({
+      faces: base.map((point, index) =>
+        outwardFace([point, base[(index + 1) % base.length]!, apex], center, octocatColors.body),
+      ),
+    });
+    // 耳の内側は前向きの面だけに色を付け、正面から猫耳と分かるようにする。
+    parts.push({
+      faces: [
+        outwardFace(
+          [
+            local(side * 0.14, 0.075, 0.76),
+            local(side * 0.24, 0.075, 0.76),
+            local(side * 0.235, 0.03, 0.92),
+          ],
+          local(side * 0.19, -0.2, 0.8),
+          octocatColors.ear,
+        ),
+      ],
+    });
+  }
+  // 顔・目・鼻は頭の前面から少し出し、回転しても顔の向きが読めるようにする。
+  parts.push(
+    ellipsoid(local(0, 0.16, 0.6), frame, [0.23 * s, 0.11 * s, 0.155 * s], octocatColors.face),
+  );
+  for (const side of [-1, 1])
+    parts.push(
+      ellipsoid(
+        local(side * 0.085, 0.262, 0.62),
+        frame,
+        [0.032 * s, 0.018 * s, 0.052 * s],
+        octocatColors.eye,
+        octocatColors.eye,
+        4,
+        8,
+      ),
+    );
+  parts.push(
+    ellipsoid(
+      local(0, 0.272, 0.555),
+      frame,
+      [0.022 * s, 0.014 * s, 0.016 * s],
+      octocatColors.ear,
+      octocatColors.ear,
+      4,
+      8,
+    ),
+  );
+  return { kind: 'repository', parts, height: s * 0.98 + 3 };
+}
+
+/** 公式ロゴを載せる面の傾き。視線から少し下へ傾け、上の厚みを見せる。 */
+const plaqueTilt = (14 * Math.PI) / 180;
+
+/**
+ * 公式ロゴのメダリオン。厚みと面取りのある板を視点へ向けて立て、正面に原形のロゴを置く。
+ * 正射影で正面が画面と平行な正方形になる寸法にし、ロゴを傾けたり歪めたりしない。
+ * face はロゴを置く正面の4隅（左上・右上・右下・左下）。
+ */
+export function logoPlaque(
+  cx: number,
+  cy: number,
+  z: number,
+  size: number,
+  color: string,
+  tile: boolean,
+  orientation: { yaw: number; pitch: number },
+): { parts: SolidPart[]; face: V3[]; height: number } {
+  const s = size;
+  const yaw = (orientation.yaw * Math.PI) / 180;
+  const pitch = (orientation.pitch * Math.PI) / 180;
+  const across: V3 = [Math.cos(yaw), -Math.sin(yaw), 0];
+  const view: V3 = [
+    Math.cos(pitch) * Math.sin(yaw),
+    Math.cos(pitch) * Math.cos(yaw),
+    Math.sin(pitch),
+  ];
+  const down: V3 = [
+    Math.sin(pitch) * Math.sin(yaw),
+    Math.sin(pitch) * Math.cos(yaw),
+    -Math.cos(pitch),
+  ];
+  const normal = add3(scale3(view, Math.cos(plaqueTilt)), scale3(down, Math.sin(plaqueTilt)));
+  const faceDown = add3(scale3(down, Math.cos(plaqueTilt)), scale3(view, -Math.sin(plaqueTilt)));
+  const width = s * 0.6;
+  const height = width / Math.cos(plaqueTilt);
+  const margin = s * 0.055;
+  const outerWidth = width + margin * 2;
+  const outerHeight = height + (margin * 2) / Math.cos(plaqueTilt);
+  const bevel = s * 0.03;
+  const thickness = s * 0.13;
+  const z1 = z + 3;
+  const stem = s * 0.2;
+  const ow = outerWidth / 2,
+    oh = outerHeight / 2,
+    iw = width / 2,
+    ih = height / 2;
+  // 最も低い角（下端の裏側）が支柱の上に来るよう、板の中心の高さを決める。
+  const lowest = oh * faceDown[2] - thickness * Math.max(0, normal[2]);
+  const center: V3 = [cx, cy, z1 + stem - lowest];
+  const at = (u: number, v: number, k: number): V3 =>
+    add3(center, scale3(across, u), scale3(faceDown, v), scale3(normal, k));
+  const front = [at(-ow, -oh, 0), at(ow, -oh, 0), at(ow, oh, 0), at(-ow, oh, 0)];
+  const inner = [at(-iw, -ih, bevel), at(iw, -ih, bevel), at(iw, ih, bevel), at(-iw, ih, bevel)];
+  const back = [
+    at(-ow, -oh, -thickness),
+    at(ow, -oh, -thickness),
+    at(ow, oh, -thickness),
+    at(-ow, oh, -thickness),
+  ];
+  const body = palette(color);
+  const faces: SolidFace[] = [
+    outwardFace([...back].reverse(), center, body.dark),
+    // 外周の側面
+    ...[0, 1, 2, 3].map((index) => {
+      const next = (index + 1) % 4;
+      return outwardFace(
+        [front[index]!, front[next]!, back[next]!, back[index]!],
+        center,
+        body.main,
+      );
+    }),
+    // 正面の面取り
+    ...[0, 1, 2, 3].map((index) => {
+      const next = (index + 1) % 4;
+      return outwardFace(
+        [front[index]!, front[next]!, inner[next]!, inner[index]!],
+        add3(center, scale3(normal, -thickness)),
+        body.alt,
+      );
+    }),
+    { points: inner, normal, color: tile ? color : '#ffffff' },
+  ];
+  const stemPart = box(cx, cy, z1, s * 0.09, s * 0.09, stem + s * 0.05, '#232f3e');
+  const top = Math.max(...[...front, ...back].map((point) => point[2]));
+  // 上空の経路は中心の真上から降りる。板の上端と画面上で同じ高さに見える位置で止め、
+  // 矢じりがロゴに重ならないようにする。
+  const toward: V3 = [Math.sin(yaw), Math.cos(yaw), 0];
+  const screenY = (point: V3) => dot3(point, toward) * Math.sin(pitch) - point[2] * Math.cos(pitch);
+  const anchor = (screenY([cx, cy, 0]) - screenY(front[0]!)) / Math.cos(pitch);
+  return {
+    parts: [pedestalPart(cx, cy, z, s), stemPart, { faces }],
+    face: inner,
+    height: Math.max(top, anchor) - z,
+  };
+}
+
 /**
  * 台座の中心 (cx, cy) と床の高さ z に、幅 size の立体アイコンを組み立てる。
  * 部品は下から順に並べ、描画側で奥行き順に並べ替える。

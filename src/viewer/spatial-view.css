@@ -156,6 +156,37 @@
 .spatial-solid:hover polygon:not(.spatial-solid-shadow) {
   filter: brightness(1.06);
 }
+/* 公式ロゴは色・形を変えず、板の正面に置いた写真のように影だけを付ける。 */
+.spatial-logo {
+  pointer-events: none;
+  filter: drop-shadow(0 0.6px 0.4px #0b1a2a59);
+}
+/* Octocat はクリックしたときに一度だけ跳ねる。 */
+.spatial-hop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: spatial-hop 0.55s ease-out;
+}
+@keyframes spatial-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  25% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  55% {
+    transform: translateY(-10px) scale(0.97, 1.04);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spatial-hop {
+    animation: none;
+  }
+}
+.spatial-route.flowing .spatial-tube-glow {
+  opacity: 0.32;
+}
 .spatial-leader {
   stroke: #7d9599;
   stroke-width: 1;
