@@ -146,11 +146,13 @@ export function tubePath(points: Point[], curved: boolean, radius = 14): string 
 }
 
 export function dedupe<T extends Point>(points: T[]): T[] {
-  return points.filter(
-    (point, index) =>
-      index === 0 ||
-      Math.hypot(point.x - points[index - 1]!.x, point.y - points[index - 1]!.y) > 0.5,
-  );
+  const retained: T[] = [];
+  for (const point of points) {
+    const previous = retained.at(-1);
+    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) > 0.5)
+      retained.push(point);
+  }
+  return retained;
 }
 
 /** 折れ線上に一定間隔で向き付きの目印を置く。 */

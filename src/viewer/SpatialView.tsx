@@ -1,5 +1,6 @@
 import {
   useId,
+  useLayoutEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -295,7 +296,7 @@ function Tube({
       data-tier={drawn.route.tier}
       data-kind={drawn.route.kind}
       data-telemetry={drawn.route.telemetry ? 'true' : undefined}
-      opacity={edge.style?.opacity}
+      opacity={Number(edge.style?.opacity ?? 1) * (drawn.route.tier === 'under' ? 0.94 : 1)}
       onClick={() => onSelect(edge.id)}
     >
       <path
@@ -484,6 +485,30 @@ export function SpatialView<T extends SpatialNode>({
     );
     return { captions, tags };
   }, [scene]);
+  const noteElements = useRef(new Map<string, HTMLDivElement>());
+  const [noteMeasurements, setNoteMeasurements] = useState<{
+    layout?: LayoutResult;
+    heights: ReadonlyMap<string, number>;
+  }>({ heights: new Map() });
+  useLayoutEffect(() => {
+    if (!active || !layout) return;
+    const measure = () => {
+      const heights = new Map(
+        [...noteElements.current].map(([id, element]) => [id, element.offsetHeight]),
+      );
+      setNoteMeasurements((current) =>
+        current.layout === layout &&
+        current.heights.size === heights.size &&
+        [...heights].every(([id, height]) => current.heights.get(id) === height)
+          ? current
+          : { layout, heights },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of noteElements.current.values()) observer.observe(element);
+    return () => observer.disconnect();
+  }, [active, layout, nodeKey]);
   const projector = useMemo(() => createProjector(orientation), [orientation]);
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const edgeColors = new Map(
@@ -667,15 +692,26 @@ export function SpatialView<T extends SpatialNode>({
       const anchor = note.anchor
         ? projector.project([note.anchor.x, note.anchor.y, scene.surfaceAt(note.anchor) + 10])
         : undefined;
-      return { note, center, anchor };
+      const height =
+        noteMeasurements.layout === layout
+          ? Math.max(note.height, noteMeasurements.heights.get(note.id) ?? 0)
+          : note.height;
+      return { note: { ...note, height }, minimumHeight: note.height, center, anchor };
     });
     return { grid, floor, slabs, solids, routes, fences, notes };
     // edgeColors は edgeKey に含まれる色の変化で更新する。
-  }, [scene, layout, projector, curved, edgeKey]);
+  }, [scene, layout, projector, curved, edgeKey, noteMeasurements]);
 
   const labels = useMemo(() => {
     if (!drawing || !scene) return undefined;
     const occupied: LabelBox[] = drawing.solids.map(({ bounds }) => boundsBox(bounds));
+    for (const { note, center } of drawing.notes)
+      occupied.push({
+        x: center.x - note.width / 2,
+        y: center.y - note.height / 2,
+        width: note.width,
+        height: note.height,
+      });
     const captions = new Map(
       [...drawing.solids]
         .sort((a, b) => b.anchor.y - a.anchor.y)
@@ -743,6 +779,7 @@ export function SpatialView<T extends SpatialNode>({
     if (!wanted) {
       for (const drawn of drawing.routes.values()) includeBox(bounds, boundsBox(drawn.bounds));
       for (const { box } of labels.edgeLabels.values()) includeBox(bounds, box);
+      for (const { box } of labels.fenceLabels.values()) includeBox(bounds, box);
       for (const fence of drawing.fences) fence.bounds.forEach((point) => include(bounds, point));
       for (const { note, center } of drawing.notes)
         includeBox(bounds, {
@@ -792,7 +829,15 @@ export function SpatialView<T extends SpatialNode>({
   return (
     <SpatialViewport
       active={active}
-      ready={Boolean(drawing && labels)}
+      ready={Boolean(
+        drawing &&
+        labels &&
+        drawing.notes.every(
+          ({ note }) =>
+            !nodesById.has(note.id) ||
+            (noteMeasurements.layout === layout && noteMeasurements.heights.has(note.id)),
+        ),
+      )}
       getBounds={getBounds}
       onClear={onClear}
       onRotate={(dx, dy) => rotate(dx * 0.35, dy * 0.3)}
@@ -906,7 +951,7 @@ export function SpatialView<T extends SpatialNode>({
                       key={`${edge.id}-${index}`}
                       points={port}
                       className="spatial-port"
-                      opacity={edge.style?.opacity}
+                      opacity={Number(edge.style?.opacity ?? 1) * 0.5}
                     />
                   ));
                 })}
@@ -1106,18 +1151,22 @@ export function SpatialView<T extends SpatialNode>({
               </div>
             );
           })}
-          {drawing.notes.map(({ note, center }) => {
+          {drawing.notes.map(({ note, minimumHeight, center }) => {
             const node = nodesById.get(note.id);
             return node ? (
               <div
                 key={note.id}
                 className="spatial-item spatial-note"
+                ref={(element) => {
+                  if (element) noteElements.current.set(note.id, element);
+                  else noteElements.current.delete(note.id);
+                }}
                 data-resource-id={note.id}
                 style={{
                   left: center.x - note.width / 2,
                   top: center.y - note.height / 2,
                   width: note.width,
-                  minHeight: note.height,
+                  minHeight: minimumHeight,
                 }}
               >
                 {renderNode(node)}

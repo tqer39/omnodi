@@ -135,7 +135,7 @@ const levelAccents = ['#5f8f86', '#4d7fa0', '#6c6fae', '#5c8f68'];
 export function boundaryAccent(resource: Resource, level: number): string {
   return (
     resourceAppearance(resource).borderColor ??
-    boundaryAccents[resource.type] ??
+    (Object.hasOwn(boundaryAccents, resource.type) ? boundaryAccents[resource.type] : undefined) ??
     levelAccents[level % levelAccents.length]!
   );
 }
@@ -150,16 +150,15 @@ const toward = (from: Point, to: Point, distance: number): Point => {
     y: from.y + ((to.y - from.y) / length) * distance,
   };
 };
-const dedupe3 = (points: V3[]) =>
-  points.filter(
-    (point, index) =>
-      index === 0 ||
-      Math.hypot(
-        point[0] - points[index - 1]![0],
-        point[1] - points[index - 1]![1],
-        point[2] - points[index - 1]![2],
-      ) > 0.5,
-  );
+const dedupe3 = (points: V3[]) => {
+  const retained: V3[] = [];
+  for (const point of points) {
+    const previous = retained.at(-1);
+    if (!previous || Math.hypot(...point.map((value, axis) => value - previous[axis]!)) > 0.5)
+      retained.push(point);
+  }
+  return retained;
+};
 
 /** 立体の大きさ。2D のカード枠に収め、極端に小さい・大きい形を避ける。 */
 export const solidSize = (box: Placement) =>
@@ -277,6 +276,24 @@ export function buildScene(
     return { center: point, base: height, top: height, radius: 0 };
   };
   const routes: SceneRoute[] = [];
+  const bundleKey = (edge: SceneEdgeInput) =>
+    JSON.stringify([edge.source, edge.target, routeTier(edge.kind)]);
+  const minimumLanes = new Map<string, number>();
+  const highestUnder = new Map<string, number>();
+  for (const edge of edges) {
+    const key = bundleKey(edge);
+    const lane = (edge.parallelOffset ?? 0) / 64;
+    minimumLanes.set(key, Math.min(minimumLanes.get(key) ?? lane, lane));
+    if (routeTier(edge.kind) === 'under') {
+      const depth =
+        edge.kind === 'traffic'
+          ? isTelemetry(edge.signals)
+            ? tierDepths.telemetry
+            : tierDepths.traffic
+          : tierDepths.replication;
+      highestUnder.set(key, Math.max(highestUnder.get(key) ?? -Infinity, depth - lane * 6));
+    }
+  }
   const routeById = new Map((layout.edges ?? []).map((route) => [route.id, route]));
   for (const edge of edges) {
     let route: EdgeRoute | undefined = routeById.get(edge.id);
@@ -296,6 +313,8 @@ export function buildScene(
     const tier = routeTier(edge.kind);
     const telemetry = tier === 'under' && edge.kind === 'traffic' && isTelemetry(edge.signals);
     const lane = (edge.parallelOffset ?? 0) / 64;
+    const key = bundleKey(edge);
+    const minimumLane = minimumLanes.get(key) ?? lane;
     const labelPoint = route.label ?? route.points[Math.floor(route.points.length / 2)]!;
     const start = toward(source.center, first, source.radius);
     const end = toward(target.center, last, target.radius);
@@ -310,7 +329,8 @@ export function buildScene(
           : edge.kind === 'traffic'
             ? tierDepths.traffic
             : tierDepths.replication) -
-        lane * 6;
+        lane * 6 -
+        Math.max(0, (highestUnder.get(key) ?? -1) + 1);
       const out = source.base + 6;
       const into = target.base + 6;
       // 立体の脇から床へ潜り、床下を通って接続先の脇で立ち上がる。
@@ -331,9 +351,10 @@ export function buildScene(
     } else if (tier === 'air') {
       const ground = Math.max(...route.points.map(surfaceAt), source.base, target.base);
       const height =
-        Math.max(source.top, target.top, ground + airClearance) +
+        Math.max(source.top + 16, target.top + 16, ground + airClearance) +
         (airOffsets[edge.kind] ?? 0) +
-        lane * 14;
+        lane * 14 +
+        Math.max(0, (-1 - minimumLane) * 14);
       // 立体の上面から真上へ上がり、上空を渡って接続先へ降りる。
       points = [
         [source.center.x, source.center.y, source.top],
@@ -347,14 +368,22 @@ export function buildScene(
       shadow = points.slice(1, -1).map(([x, y]): V3 => [x, y, surfaceAt({ x, y }) + 0.6]);
       labelZ = height;
     } else {
+      // 束全体を床から離す方向へ移し、線間の距離を維持する。両端は各床の接続口へ戻す。
       const height =
-        Math.max(source.base, target.base, ...route.points.map(surfaceAt)) + 5 + lane * 3;
+        Math.max(source.base, target.base, ...route.points.map(surfaceAt)) +
+        5 +
+        lane * 3 +
+        Math.max(0, 2 - (5 + minimumLane * 3));
+      const sourceHeight = source.base + 5;
+      const targetHeight = target.base + 5;
       points = [
-        [start.x, start.y, height],
+        [start.x, start.y, sourceHeight],
+        [first.x, first.y, sourceHeight],
         [first.x, first.y, height],
         ...middle.map(({ x, y }): V3 => [x, y, height]),
         [last.x, last.y, height],
-        [end.x, end.y, height],
+        [last.x, last.y, targetHeight],
+        [end.x, end.y, targetHeight],
       ];
       labelZ = height;
     }

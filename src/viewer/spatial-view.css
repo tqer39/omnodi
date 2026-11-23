@@ -98,12 +98,8 @@
   stroke-width: 1.5;
   opacity: 0.9;
 }
-.spatial-layer-under .spatial-route {
-  opacity: 0.94;
-}
 .spatial-port {
   fill: #1c2a35;
-  opacity: 0.5;
 }
 .spatial-air-shadow {
   fill: none;

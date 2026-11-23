@@ -1,10 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { LayoutResult, Resource } from '../src/core/model.js';
-import { createProjector, tubePath } from '../src/viewer/spatial-math.js';
+import { createProjector, dedupe, tubePath, type V3 } from '../src/viewer/spatial-math.js';
 import { buildScene, tierDepths } from '../src/viewer/spatial-scene.js';
-import { buildSolid, solidKind, solidKinds } from '../src/viewer/spatial-solids.js';
+import { buildSolid, diamondTip, solidKind, solidKinds } from '../src/viewer/spatial-solids.js';
 import { placeSpatialLabel } from '../src/viewer/spatial-labels.js';
+import { nodeShape } from '../src/core/notation.js';
 
 const resource = (id: string, type: string, attributes: Resource['attributes'] = {}): Resource => ({
   id,
@@ -302,9 +303,207 @@ it('2点と重複点の配管パスに不正座標を出さない', () => {
   for (const curved of [false, true]) {
     const start = { x: 0, y: 0 };
     const end = { x: 100, y: 10 };
-    const expected = tubePath([start, end], curved);
+    const expected = 'M 0 0 L 100 10';
+    assert.equal(tubePath([start, end], curved), expected);
     assert.equal(tubePath([start, start, end, end], curved), expected);
     assert.equal(tubePath([start, start], curved), '');
     assert.doesNotMatch(expected, /NaN|Infinity/);
   }
+});
+
+it('小刻みに往復する配管点でも保持した隣接点を重複させない', () => {
+  const points = [0, 10, 10.4, 10.8, 10, 20].map((x) => ({ x, y: 0 }));
+  const distinct = dedupe(points);
+  assert.ok(
+    distinct.every((point, index) => !index || Math.abs(point.x - distinct[index - 1]!.x) > 0.5),
+  );
+  for (const curved of [false, true]) assert.doesNotMatch(tubePath(points, curved), /NaN|Infinity/);
+});
+
+it('Object.prototype と同名の未知の型・アイコンも汎用の立体へ退避する', () => {
+  for (const type of ['constructor', 'toString', '__proto__']) {
+    assert.equal(nodeShape(resource('unknown', type)), 'rectangle');
+    assert.equal(solidKind(resource('unknown', type)), 'generic');
+    assert.equal(solidKind(resource('unknown', 'unknown'), type), 'generic');
+    const scene = buildScene(
+      {
+        durationMs: 0,
+        version: 'test',
+        nodes: [{ id: 'unknown', x: 0, y: 0, width: 80, height: 60 }],
+      },
+      [
+        {
+          id: 'unknown',
+          resource: resource('unknown', type, { boundary: true }),
+          collapsed: false,
+        },
+      ],
+      [],
+    );
+    assert.equal(typeof scene.slabs[0]!.accent, 'string');
+  }
+});
+
+it('AI の立体と UML の菱形の法線は三角形の両辺に垂直になる', () => {
+  const shapes = [
+    buildSolid('ai', 0, 0, 0, 80),
+    ...(
+      [
+        [0, 1, 0],
+        [0, 0, 1],
+      ] as V3[]
+    ).map((direction) => ({ parts: [diamondTip([0, 0, 0], direction, 14, 5, '#abcdef')] })),
+  ];
+  for (const shape of shapes)
+    for (const part of shape.parts) {
+      const vertices = part.faces.flatMap((face) => face.points);
+      const center = [0, 1, 2].map(
+        (axis) => vertices.reduce((sum, point) => sum + point[axis]!, 0) / vertices.length,
+      );
+      for (const face of part.faces) {
+        if (face.points.length !== 3) continue;
+        const [a, b, c] = face.points;
+        for (const point of [b!, c!]) {
+          const dot = face.normal.reduce(
+            (sum, value, axis) => sum + value * (point[axis]! - a![axis]!),
+            0,
+          );
+          assert.ok(Math.abs(dot) < 1e-6);
+        }
+        assert.ok(Math.hypot(...face.normal) > 0);
+        const outward = face.points[0]!.map(
+          (_, axis) =>
+            face.points.reduce((sum, point) => sum + point[axis]!, 0) / face.points.length -
+            center[axis]!,
+        );
+        assert.ok(face.normal.reduce((sum, value, axis) => sum + value * outward[axis]!, 0) > 0);
+      }
+    }
+});
+
+it('大量の並行経路でも床下・床面・上空の高さの区別を保つ', () => {
+  const layout: LayoutResult = {
+    durationMs: 0,
+    version: 'test',
+    nodes: [
+      { id: 'a', x: 0, y: 0, width: 80, height: 60 },
+      { id: 'b', x: 400, y: 0, width: 80, height: 60 },
+    ],
+  };
+  for (const parallelOffset of [-6400, 0, 6400]) {
+    const scene = buildScene(
+      layout,
+      ['a', 'b'].map((id) => ({ id, resource: resource(id, 'aws.ec2'), collapsed: false })),
+      [
+        {
+          id: 'under',
+          source: 'a',
+          target: 'b',
+          kind: 'traffic',
+          signals: ['metrics'],
+          parallelOffset,
+        },
+        { id: 'surface', source: 'a', target: 'b', kind: 'association', parallelOffset },
+        { id: 'air', source: 'a', target: 'b', kind: 'dependency', parallelOffset },
+      ],
+    );
+    assert.ok(scene.routes.find((route) => route.id === 'under')!.label[2] < 0);
+    assert.ok(
+      scene.routes.find((route) => route.id === 'surface')!.points.every((point) => point[2] >= 0),
+    );
+    assert.ok(
+      scene.routes.find((route) => route.id === 'air')!.label[2] >=
+        Math.max(...scene.solids.map((solid) => solid.top)),
+    );
+    if (!parallelOffset)
+      assert.equal(
+        scene.routes.find((route) => route.id === 'under')!.label[2],
+        tierDepths.telemetry,
+      );
+  }
+});
+
+it('並行する同種の接続は束全体をずらしても線間の距離を保つ', () => {
+  const layout: LayoutResult = {
+    durationMs: 0,
+    version: 'test',
+    nodes: [
+      { id: 'a', x: 0, y: 0, width: 80, height: 60 },
+      { id: 'b', x: 400, y: 0, width: 80, height: 60 },
+    ],
+  };
+  for (const kind of ['traffic', 'association', 'dependency'] as const) {
+    const scene = buildScene(
+      layout,
+      ['a', 'b'].map((id) => ({ id, resource: resource(id, 'aws.ec2'), collapsed: false })),
+      Array.from({ length: 9 }, (_, i) => ({
+        id: String(i),
+        source: 'a',
+        target: 'b',
+        kind,
+        parallelOffset: (i - 4) * 64,
+      })),
+    );
+    assert.equal(new Set(scene.routes.map((route) => route.label[2])).size, 9);
+    const levels = scene.routes.map((route) => route.label[2]).sort((a, b) => a - b);
+    const spacing = { traffic: 6, association: 3, dependency: 14 }[kind];
+    assert.ok(levels.every((level, index) => !index || level - levels[index - 1]! >= spacing));
+  }
+});
+
+it('3D の経路も最後に保持した点から小刻みな往復を除く', () => {
+  const layout: LayoutResult = {
+    durationMs: 0,
+    version: 'test',
+    nodes: [
+      { id: 'a', x: 0, y: 0, width: 80, height: 60 },
+      { id: 'b', x: 400, y: 0, width: 80, height: 60 },
+    ],
+    edges: [{ id: 'edge', points: [0, 10, 10.4, 10.8, 10, 20, 400].map((x) => ({ x, y: 30 })) }],
+  };
+  const scene = buildScene(
+    layout,
+    ['a', 'b'].map((id) => ({ id, resource: resource(id, 'aws.ec2'), collapsed: false })),
+    [{ id: 'edge', source: 'a', target: 'b', kind: 'association' }],
+  );
+  const points = scene.routes[0]!.points;
+  assert.ok(
+    points.every(
+      (point, index) =>
+        !index ||
+        Math.hypot(...point.map((value, axis) => value - points[index - 1]![axis]!)) > 0.5,
+    ),
+  );
+});
+
+it('異なる階の床面接続は両端の床へ降り、同じ階では水平を保つ', () => {
+  const layout: LayoutResult = {
+    durationMs: 0,
+    version: 'test',
+    nodes: [
+      { id: 'group', x: 300, y: 0, width: 300, height: 200 },
+      { id: 'a', x: 0, y: 0, width: 80, height: 60 },
+      { id: 'b', x: 30, y: 40, width: 80, height: 60, parentId: 'group' },
+    ],
+  };
+  const scene = buildScene(
+    layout,
+    [
+      { id: 'group', resource: resource('group', 'group'), collapsed: false },
+      { id: 'a', resource: resource('a', 'generic'), collapsed: false },
+      { id: 'b', resource: resource('b', 'generic'), collapsed: false },
+    ],
+    [
+      { id: 'cross', source: 'a', target: 'b', kind: 'association' },
+      { id: 'same', source: 'a', target: 'a', kind: 'association' },
+    ],
+  );
+  const cross = scene.routes.find((route) => route.id === 'cross')!;
+  assert.equal(cross.points[0]![2], scene.solids.find((solid) => solid.id === 'a')!.base + 5);
+  assert.equal(cross.points.at(-1)![2], scene.solids.find((solid) => solid.id === 'b')!.base + 5);
+  assert.equal(
+    new Set(scene.routes.find((route) => route.id === 'same')!.points.map((point) => point[2]))
+      .size,
+    1,
+  );
 });
