@@ -14,6 +14,7 @@
     "package-lock.json",
     "mise.toml",
     ".standards/**",
+    ".github/workflows/dev-standards.yml",
     ".claude/rules/**",
     ".devin/rules/**",
     ".github/instructions/**"
