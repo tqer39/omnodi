@@ -806,7 +806,7 @@ export function SpatialView<T extends SpatialNode>({
     if (scope === 'focus') {
       // 利用者の要求が流れる経路（入口・処理・保存先）を初期表示の注目領域にする。
       // 上空の配備・認証や監視信号は遠くに置かれやすく、含めると主要部分が小さくなる。
-      // 境界の外にいる利用者などは離れて置かれるため、境界の中の端点があればそちらを優先する。
+      // 利用者などは離れて置かれるため、台座上の端点があればそちらを優先する。
       const ends = new Set(
         [...drawing.routes.values()].flatMap(({ route }) =>
           route.tier === 'under' && !route.telemetry ? [route.source, route.target] : [],

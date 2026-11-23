@@ -270,6 +270,21 @@ describe('3D の初期表示と全体表示', () => {
     assert.ok(shown.top >= 0 && shown.bottom <= laptop.height);
   });
 
+  it('通信経路が構造全体に広がる図で、初期表示を縮小して一部だけ切り取らない', () => {
+    const structure = box(0, 0, 1200, 920);
+    const all = box(-100, -100, 1400, 1120);
+    for (const ends of [
+      [box(0, 0, 100, 100), box(1100, 820, 100, 100)],
+      [box(40, 40, 100, 100), box(1060, 780, 100, 100)],
+    ]) {
+      const initial = initialCamera(all, structure, laptop, ends);
+      assert.ok(initial.zoom >= focusMinZoom);
+      assert.ok(initial.zoom > overviewCamera(all, laptop).zoom);
+      assert.ok(inside(onScreen(initial, structure), laptop));
+      for (const end of ends) assert.ok(inside(onScreen(initial, end), laptop));
+    }
+  });
+
   for (const [name, size] of [
     ['ノート PC', laptop],
     ['デスクトップ', { width: 1440, height: 900 }],

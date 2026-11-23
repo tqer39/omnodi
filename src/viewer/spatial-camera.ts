@@ -81,6 +81,8 @@ export function initialCamera(
   if (focus.length) {
     const area = union(focus);
     const camera = fitCamera(area, size, focusRatio);
+    // 注目領域が構造全体と近い広さなら、余白の差で逆に縮むことを避ける。
+    if (fitted.zoom >= focusMinZoom && camera.zoom <= fitted.zoom) return fitted;
     if (camera.zoom >= focusMinZoom) return camera;
     // 端点が広く離れると外接矩形の中央は空白になる。文字が潰れない倍率を保ち、
     // 主要部分の中央に最も近い端点を画面の中央に置く。
