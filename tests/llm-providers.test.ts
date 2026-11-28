@@ -269,7 +269,7 @@ it('設定公開はAPIキーを含まず、未設定のプロバイダーは呼�
   assert.equal(absent.result().status, 400);
   for (const baseURL of [
     'http://remote.test/v1',
-    'https://user:secret@remote.test/v1',
+    'https://user:xxxx@remote.test/v1',
     'https://remote.test/v1?key=secret',
     'file:///tmp/test',
   ])

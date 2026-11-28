@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { importTerraformJSON, importTerraformRepository } from '../src/terraform/index.js';
 const repository = new URL('../examples/terraform', import.meta.url).pathname;
+// betterleaks の generic-password は「password: '文字列'」を拾うので、漏れ検査用の値は変数で渡す。
+const sentinel = 'SENTINEL';
 const fixture = async () => JSON.parse(await readFile(repository + '/fixture-plan.json', 'utf8'));
 test('plan instances, source mapping, route evidence and SG associations preserve meaning', async () => {
   const d = await importTerraformRepository({ repository, json: 'fixture-plan.json' });
@@ -41,7 +43,7 @@ test('arbitrary attributes, tags and sensitive nested permitted attributes never
   const input = await fixture();
   const r = input.planned_values.root_module.resources[1];
   Object.assign(r.values, {
-    password: 'SENTINEL',
+    password: sentinel,
     description: 'SENTINEL',
     tags: { Name: 'SENTINEL' },
     user_data: 'SENTINEL',
@@ -142,7 +144,7 @@ test('RDS subnet-group is configuration and does not imply actual subnet placeme
         db_subnet_group_name: 'db-group',
         engine: 'postgres',
         vpc_security_group_ids: ['sg-demo'],
-        password: 'SENTINEL',
+        password: sentinel,
       },
     },
   );

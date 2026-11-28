@@ -1,0 +1,12 @@
+# betterleaks の誤検知の除外。既定のルールはそのまま使い、ファイルとルールを絞って足す。
+[extend]
+useDefault = true
+
+# プロバイダー名の対応表のキー `onepassword` が「password: '値'」と読まれる。
+# 値は表示名とアイコン名（1Password）で、secret ではない。
+[[allowlists]]
+description = "scaffold.ts のプロバイダー名 onepassword の表示名とアイコン名"
+targetRules = ["generic-password"]
+condition = "AND"
+paths = ['''^src/assistant/scaffold\.ts$''']
+regexes = ['''^(1Password|saas\.1password)$''']
