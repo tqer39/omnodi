@@ -33,6 +33,11 @@ run = "node --import tsx src/cli.ts"
 [tasks.typecheck]
 run = "tsc --noEmit"
 
+[tasks."typecheck:tsrs"]
+description = "Experimental Rust TypeScript check; tsc remains required"
+tools = { "npm:tsrs" = "0.18.0-ts7.1.0-dev.20260929" }
+run = "tsrs --noEmit"
+
 [tasks."test:icons"]
 run = "python tests/update-icons.test.py"
 
