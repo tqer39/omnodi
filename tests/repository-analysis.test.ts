@@ -101,7 +101,7 @@ it('workflowのworking-directoryとローカルActionの入口を解決する', 
   );
 });
 it('取得は入口から未命名のスクリプト・import先をたどり、秘密ファイルを読まない', async () => {
-  const treeFiles = [...files, { path: 'ops/.env.json', content: '{"password":"hidden"}' }];
+  const treeFiles = [...files, { path: 'ops/.env.json', content: '{"password":"xxxx"}' }];
   const indexed = treeFiles.map((file, index) => ({
     ...file,
     sha: (index + 1).toString(16).padStart(40, '0'),
